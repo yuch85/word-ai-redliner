@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contract Review Add-in</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <!-- CSS is injected by webpack via taskpane.js import -->
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-brand">
+                <span class="header-suite">Word AI Redliner</span>
+                <h1 class="header-title">Contract Review Add-in</h1>
+            </div>
+            <div class="connection-status" id="connectionStatus">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Prompt Management -->
+        <section class="prompt-section">
+            <div class="form-group">
+                <label for="promptSelect">Saved Prompts:</label>
+                <select id="promptSelect" class="form-control">
+                    <option value="">Select a prompt...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="promptTextarea">Prompt:</label>
+                <textarea id="promptTextarea" class="form-control" rows="6"
+                    placeholder="Enter your prompt here. Use {selection} to reference the selected text."></textarea>
+            </div>
+            <div class="button-group compact-toolbar">
+                <button id="savePromptBtn" class="btn btn-compact">💾 Save</button>
+                <button id="deletePromptBtn" class="btn btn-compact">🗑️ Delete</button>
+                <button id="resetPromptBtn" class="btn btn-compact">↺ Clear</button>
+            </div>
+        </section>
+
+        <!-- Main Actions -->
+        <section class="action-section">
+            <button id="reviewBtn" class="btn btn-primary btn-hero full-width">
+                Review Selection →
+            </button>
+        </section>
+
+        <!-- Settings Section -->
+        <section class="settings-section">
+            <div class="collapsible-header" id="settingsToggle">
+                <span>⚙️ Settings</span>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="collapsible-content" id="settingsContent">
+                <div class="form-group">
+                    <label for="modelSelect">Model:</label>
+                    <select id="modelSelect" class="form-control">
+                        <option value="">Loading models...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="ollamaUrl">Ollama URL:</label>
+                    <input type="text" id="ollamaUrl" class="form-control" placeholder="/ollama">
+                    <small class="help-text">Use /ollama for local proxy</small>
+                </div>
+                <div class="form-group">
+                    <label for="apiKey">API Key (Optional):</label>
+                    <input type="password" id="apiKey" class="form-control" placeholder="Leave blank for local Ollama">
+                </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="trackChangesCheckbox" checked>
+                        Enable Track Changes
+                    </label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="lineDiffCheckbox">
+                        Force Line Diff (Sentence Mode)
+                    </label>
+                </div>
+                <button id="saveSettingsBtn" class="btn btn-secondary full-width">💾 Save Settings</button>
+            </div>
+        </section>
+
+        <!-- Verification Section -->
+        <section class="verification-section" id="verificationSection">
+            <button id="runVerificationBtn" class="btn btn-secondary full-width verification-btn">
+                <span class="btn-icon">🧪</span>
+                Run Verification Script
+            </button>
+        </section>
+
+        <!-- Logs -->
+        <section class="logs-section">
+            <div class="logs-header">
+                <label>Activity Log:</label>
+                <button id="clearLogsBtn" class="btn-link">Clear</button>
+            </div>
+            <div id="logs" class="logs-container"></div>
+        </section>
+    </div>
+
+    <!-- Save Prompt Modal -->
+    <div id="savePromptModal" class="modal">
+        <div class="modal-content">
+            <h3>Save Prompt</h3>
+            <div class="form-group">
+                <label for="promptName">Prompt Name:</label>
+                <input type="text" id="promptName" class="form-control" placeholder="e.g., Legal Review">
+            </div>
+            <div class="form-group">
+                <label for="promptDescription">Description (optional):</label>
+                <input type="text" id="promptDescription" class="form-control" placeholder="Brief description">
+            </div>
+            <div class="modal-actions">
+                <button id="savePromptConfirmBtn" class="btn btn-primary">Save</button>
+                <button id="savePromptCancelBtn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

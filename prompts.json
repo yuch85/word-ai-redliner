@@ -1,0 +1,20 @@
+[
+  {
+    "id": "legal-review",
+    "name": "Legal Review",
+    "template": "Rewrite the following legal contract clause more protective of {party}, but keep the changes minimal and only adjust wording where necessary to strengthen rights and obligations. Do not add new concepts that are not reasonably implied by the original clause.\n\nIMPORTANT: Return ONLY the revised text as PLAIN TEXT. Do NOT use markdown formatting (no bold, italics, asterisks, underscores). Do NOT include any explanations, commentary, introductory phrases, or concluding remarks. Do NOT add any formatting (asterisks, underscores, etc.) that was not originally present in the text. Return ONLY the amended contract text.\n\nNote: Include {selection} in your custom prompt template where you want the selected text to be inserted.\n\n{selection}",
+    "description": "Comprehensive legal review of contract text"
+  },
+  {
+    "id": "plain-english",
+    "name": "Plain English",
+    "template": "Rewrite the following legal text in plain, simple English while maintaining legal accuracy.\n\nIMPORTANT: Return ONLY the rewritten text as PLAIN TEXT. Do NOT use markdown formatting (no bold, italics, asterisks, underscores). Do NOT include any explanations, commentary, introductory phrases, or concluding remarks. Do NOT add any formatting (asterisks, underscores, etc.) that was not originally present in the text. Return ONLY the rewritten text.\n\n{selection}",
+    "description": "Convert legal jargon to plain language"
+  },
+  {
+    "id": "risk-analysis",
+    "name": "Risk Analysis",
+    "template": "Revise the following contract clause to reduce risks and liability issues.\n\nIMPORTANT: Return ONLY the revised clause as PLAIN TEXT. Do NOT use markdown formatting (no bold, italics, asterisks, underscores). Do NOT include any explanations, commentary, introductory phrases, or concluding remarks. Do NOT add any formatting (asterisks, underscores, etc.) that was not originally present in the text. Return ONLY the revised clause.\n\nNote: Include {selection} in your custom prompt template where you want the selected text to be inserted.\n\n{selection}",
+    "description": "Identify and mitigate risks"
+  }
+]

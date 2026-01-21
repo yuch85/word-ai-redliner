@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Reference library (use npm dependency instead)
+reference - office-word-diff/
+
+# Environment
+.env
+
+# SSL certificates (do not commit private keys)
+*.pem
+*.crt
+*.key
+
+# Logs
+logs/
+*.log
+
+# E2E test logs
+logs/e2e-test-logs.json
+
+# OS files
+.DS_Store
+Thumbs.db
