@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:type="TaskPaneApp">
+  <Id>12345678-1234-1234-1234-123456789abc</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Word AI Redliner</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue=" "/>
+  <Description DefaultValue="AI-powered contract review and editing for Microsoft Word with word-level tracked changes"/>
+  <IconUrl DefaultValue="${PROTOCOL}://${HOST}:${PORT}/assets/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="${PROTOCOL}://${HOST}:${PORT}/assets/icon-80.png"/>
+  <SupportUrl DefaultValue="${PROTOCOL}://${HOST}:${PORT}/"/>
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="${PROTOCOL}://${HOST}:${PORT}/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>

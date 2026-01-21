@@ -1,0 +1,45 @@
+{
+  "name": "word-ai-redliner",
+  "version": "1.0.0",
+  "description": "AI-powered contract review and editing for Microsoft Word with word-level tracked changes",
+  "main": "src/taskpane/taskpane.js",
+  "scripts": {
+    "start": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "lint": "eslint src/**/*.js",
+    "test": "jest",
+    "test:e2e": "node src/e2e/test-runner.js",
+    "trigger-next": "node src/e2e/trigger-next-iteration.js trigger",
+    "check-loop": "node src/e2e/trigger-next-iteration.js status"
+  },
+  "type": "module",
+  "keywords": [
+    "office-add-in",
+    "word",
+    "ai",
+    "ollama",
+    "contract-review"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "diff-match-patch": "^1.0.5",
+    "office-word-diff": "github:yuch85/office-word-diff"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.5",
+    "@babel/preset-env": "^7.28.5",
+    "@types/office-js": "^1.0.0",
+    "babel-jest": "^30.2.0",
+    "copy-webpack-plugin": "^11.0.0",
+    "css-loader": "^6.8.1",
+    "dotenv": "^17.2.3",
+    "eslint": "^8.51.0",
+    "html-webpack-plugin": "^5.5.3",
+    "jest": "^30.2.0",
+    "style-loader": "^3.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  }
+}
