@@ -25,3 +25,6 @@ logs/e2e-test-logs.json
 # OS files
 .DS_Store
 Thumbs.db
+
+# IDE
+*.code-workspace
