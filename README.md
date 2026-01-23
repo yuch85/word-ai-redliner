@@ -3,6 +3,8 @@
 AI-powered Microsoft Word add-in that applies word-level tracked changes using
 a structure-aware diff strategy.
 
+**Project history**: This library was extracted from a private codebase and open-sourced as a standalone project in Jan 2026.
+
 ## Features
 
 - Word-level diffs with tracked changes
