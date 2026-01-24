@@ -3,7 +3,11 @@
 AI-powered Microsoft Word add-in that applies word-level tracked changes using
 a structure-aware diff strategy.
 
-[![Demo GIF](docs/word-ai-redliner.gif)](https://www.youtube.com/watch?v=0Oa05jk3wrU)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=0Oa05jk3wrU">
+    <img src="docs/word-ai-redliner.gif" alt="Word AI Redliner demo" />
+  </a>
+</p>
 
 **Project history**: This library was extracted from a private codebase and open-sourced as a standalone project in Jan 2026.
 
