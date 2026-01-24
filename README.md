@@ -15,56 +15,146 @@ a structure-aware diff strategy.
 
 ## Setup
 
+There are **two ways** to run this add-in:
+
+| Method | Best for | Requirements |
+|--------|----------|--------------|
+| **Docker** | Quick setup, no Node.js needed | Docker, Docker Compose |
+| **npm** | Development, customization | Node.js 18+ |
+
+Both methods require HTTPS certificates trusted by the machine running Word.
+
+---
+
+## Option A: Docker (Recommended for Quick Setup)
+
 ### Prerequisites
 
-- Node.js 18+
-- Docker (optional, for Ollama)
+- Docker and Docker Compose
+- HTTPS certificate files (see [Create HTTPS Certificates](#create-https-certificates))
 
-### Clone the Repository
+### Step-by-Step
 
-1. Clone the repo:
+1. **Clone the repository**
 
 ```bash
 git clone https://github.com/yuch85/word-ai-redliner.git
-```
-
-2. Enter the project directory:
-
-```bash
 cd word-ai-redliner
 ```
 
-### Install Dependencies (npm workflow)
+2. **Create HTTPS certificates** (see [Create HTTPS Certificates](#create-https-certificates))
 
-From the project root, install npm dependencies (Docker users can skip this):
+   Place `server.pem` and `server-key.pem` in the project root.
+
+3. **Configure environment variables**
+
+   Copy the Docker example and edit it:
+
+```bash
+cp .env.docker.example .env
+```
+
+   On Windows PowerShell:
+
+```powershell
+Copy-Item .env.docker.example .env
+```
+
+   **Important:** Edit `.env` and set `HOST` to the hostname or IP address that
+   the Word client can reach. If Word runs on a different machine, do **not**
+   use `localhost`.
+
+4. **Start the container**
+
+```bash
+docker compose up -d
+```
+
+   The container automatically generates `manifest.xml` on first startup using
+   your `.env` values. The manifest is written to the project root.
+
+5. **Trust the certificate on Windows** (see [Trust the Certificate on Windows](#trust-the-certificate-on-windows))
+
+6. **Sideload the add-in** (see [Sideload the Add-in](#sideload-the-add-in))
+
+   Use the `manifest.xml` file in the project root.
+
+---
+
+## Option B: npm (For Development)
+
+### Prerequisites
+
+- Node.js 18+
+- HTTPS certificate files (see [Create HTTPS Certificates](#create-https-certificates))
+
+### Step-by-Step
+
+1. **Clone the repository**
+
+```bash
+git clone https://github.com/yuch85/word-ai-redliner.git
+cd word-ai-redliner
+```
+
+2. **Install dependencies**
 
 ```bash
 npm install
 ```
 
-### Local HTTPS Certificates (PEM files)
+3. **Create HTTPS certificates** (see [Create HTTPS Certificates](#create-https-certificates))
 
-The dev server runs over HTTPS. For Word to load the add-in, the certificate
-must be trusted on the machine running Word.
+   Place `server.pem` and `server-key.pem` in the project root.
+
+4. **Configure environment variables**
+
+   Copy the example and edit it:
+
+```bash
+cp .env.example .env
+```
+
+   On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+   **Important:** Edit `.env` and set `HOST` to the hostname or IP address that
+   the Word client can reach. If Word runs on a different machine, do **not**
+   use `localhost`.
+
+5. **Start the dev server**
+
+```bash
+npm start
+```
+
+   This generates `manifest.xml` from your `.env` values and starts the webpack
+   dev server with hot reload.
+
+6. **Trust the certificate on Windows** (see [Trust the Certificate on Windows](#trust-the-certificate-on-windows))
+
+7. **Sideload the add-in** (see [Sideload the Add-in](#sideload-the-add-in))
+
+   Use the `manifest.xml` file in the project root.
+
+---
+
+## Create HTTPS Certificates
+
+The add-in must be served over HTTPS. Word will block untrusted certificates.
 
 Place your cert files in the project root:
 
 - `server.pem` (certificate)
 - `server-key.pem` (private key)
 
-If those files are not found, webpack will fall back to a self-signed cert,
-which will be blocked by Word unless explicitly trusted.
+### Option 1: mkcert (Recommended)
 
-You can also set environment variables to use custom filenames:
-
-```bash
-SSL_CERT_FILE=my-cert.pem SSL_KEY_FILE=my-key.pem npm start
-```
-
-#### Option A: mkcert (recommended for dev)
-
-1. Install [mkcert](https://github.com/FiloSottile/mkcert) on the server machine.
-2. Create a local CA and generate a cert for your host:
+1. Install [mkcert](https://github.com/FiloSottile/mkcert).
+2. Create a local CA and generate a cert:
 
 ```bash
 mkcert -install
@@ -76,23 +166,21 @@ mkcert localhost
 mkcert <your-server-ip-or-hostname>
 ```
 
-This creates two files (e.g., `localhost.pem` and `localhost-key.pem`).
-
-Rename them to what webpack expects:
+3. Rename the output files:
 
 ```bash
 cp localhost.pem server.pem
 cp localhost-key.pem server-key.pem
 ```
 
-On Windows PowerShell, use:
+   On Windows PowerShell:
 
 ```powershell
 Copy-Item localhost.pem server.pem
 Copy-Item localhost-key.pem server-key.pem
 ```
 
-#### Option B: OpenSSL (manual)
+### Option 2: OpenSSL (Manual)
 
 ```bash
 # Replace <YOUR_HOST> with localhost or your server IP/hostname
@@ -103,10 +191,9 @@ openssl req -x509 -nodes -days 365 \
   -subj "/CN=<YOUR_HOST>"
 ```
 
-This generates a self-signed cert. You must install the cert on the Windows
-client for Word to trust it.
+---
 
-### Trust the Certificate on Windows
+## Trust the Certificate on Windows
 
 On the Windows PC running Word:
 
@@ -122,57 +209,58 @@ openssl x509 -in server.pem -out server.crt
 5. Right-click → **All Tasks** → **Import...**
 6. Select the `.crt` file and finish the wizard.
 
-If you used mkcert, you can also install the mkcert root CA on Windows instead
-of the leaf cert:
+**If you used mkcert**, you can install the mkcert root CA on Windows instead:
 
-- Copy the mkcert root CA from the server machine (find it via `mkcert -CAROOT`)
+- Copy the root CA from the server machine (find it via `mkcert -CAROOT`)
 - Import it into **Trusted Root Certification Authorities**
 
-### Quickstart (Docker)
+---
 
-1. Copy the Docker env example and edit it:
+## Sideload the Add-in
 
-```bash
-cp .env.docker.example .env
-```
+### Word on Windows
 
-2. Update `HOST` in `.env` so it matches the hostname/IP that the Word client
-   can reach (avoid `localhost` if Word is on another machine).
-3. Place `server.pem` and `server-key.pem` in the project root
-   (see **Local HTTPS Certificates** above).
-4. Start the container:
+**Method 1: Add from file**
 
-```bash
-docker compose up -d
-```
+1. Open Word → **Insert** → **Get Add-ins** → **My Add-ins**.
+2. Click **Add a custom add-in** → **Add from file...**.
+3. Select `manifest.xml` and confirm.
 
-5. Use the generated `manifest.xml` in the project root to sideload the add-in.
+**Method 2: Network shared folder (Windows only)**
 
-### Configure Environment and generate xml manifest
+1. Create a shared folder and note the network path.
+2. In Word: **File** → **Options** → **Trust Center** → **Trust Center Settings** →
+   **Trusted Add-in Catalogs** → **Add catalog** (check **Show in Menu**).
+3. Copy `manifest.xml` into the shared folder.
+4. In Word: **Home** → **Add-ins** → **Advanced** → **Shared Folder** → select the add-in → **Add**.
 
-Follow these steps so the manifest is generated with the correct URLs:
+For full details, see the [Microsoft sideloading guide](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins).
 
-1. Create a `.env` file based on `.env.example`:
+### Word on Mac
 
-```bash
-cp .env.example .env
-```
+1. Start the server (`docker compose up -d` or `npm start`).
+2. Open Word → **Insert** → **Add-ins** → **My Add-ins**.
+3. Click **Add a custom add-in** → **Add from file...** → select `manifest.xml`.
+4. Trust the certificate in Keychain if prompted.
 
-2. Edit `.env` **before** running `npm start` or `npm run build`. The manifest
-   generator reads `HOST`, `PORT`, and `PROTOCOL` at build/dev-server time.
-   Use a hostname that the Word client can reach (avoid `localhost` if Word is
-   running on a different machine).
-3. Run `npm start` (dev) or `npm run build` (prod). Webpack will invoke
-   `scripts/generate-manifest.js`, which renders `manifest.xml` from
-   `manifest.template.xml` using your `.env` values.
-   Docker users can skip this step; the container generates `manifest.xml`
-   on startup using the same `.env` values.
+---
 
-#### Environment Variables
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Word shows "blocked because it isn't signed" | Trust the HTTPS certificate on the Windows client |
+| Word cannot load the add-in | Verify `HOST` in `.env` is reachable from Word |
+| Manifest not generated | Ensure `.env` exists before running `npm start` or `docker compose up` |
+| Firewall issues | Allow inbound TCP 3000 on the server |
+
+---
+
+## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HOST` | `localhost` | Hostname for manifest URLs |
+| `HOST` | `localhost` | Hostname for manifest URLs (must be reachable from Word) |
 | `PORT` | `3000` | Port for manifest URLs |
 | `PROTOCOL` | `https` | Protocol for manifest URLs |
 | `DEV_SERVER_HOST` | `0.0.0.0` | Host to bind webpack dev server |
@@ -184,88 +272,21 @@ cp .env.example .env
 | `DEFAULT_OLLAMA_URL` | `/ollama` | Default Ollama URL shown in UI |
 | `DEFAULT_MODEL` | `gpt-oss:20b` | Default model shown in UI |
 
-Example `.env` for a remote Ollama server:
-
-```env
-HOST=192.168.1.100
-PORT=3000
-PROTOCOL=https
-OLLAMA_PROXY_TARGET=http://192.168.1.50:11434
-DEFAULT_MODEL=llama3:8b
-```
-
 Users can override `DEFAULT_OLLAMA_URL` and `DEFAULT_MODEL` via the add-in
-settings UI; those overrides persist in localStorage. The add-in will auto-detect what Ollama models you have.
+settings UI; those overrides persist in localStorage.
 
-The manifest is generated from `manifest.template.xml` using
-`scripts/generate-manifest.js` when webpack runs.
+---
 
-### Start the Dev Server
+## Docker Image
+
+Pre-built images are available on GitHub Container Registry:
 
 ```bash
-npm start
+docker pull ghcr.io/yuch85/word-ai-redliner:0.1.0
+docker pull ghcr.io/yuch85/word-ai-redliner:latest
 ```
 
-### Sideload the Add-in (Word on Windows)
-
-1. Build or start the dev server:
-   - Dev: `npm start`
-   - Prod: `npm run build`
-2. Ensure the manifest points to the correct host (see scenarios below).
-3. Choose a sideloading method:
-
-**Option A: Add from file (local manifest)**
-
-1. Open Word and go to **Insert** → **Get Add-ins** → **My Add-ins**.
-2. Click **Add a custom add-in** → **Add from file...**.
-3. Select the `manifest.xml` file and confirm.
-
-**Option B: Network shared folder catalog (Windows only)**
-
-1. Create a shared folder on a Windows machine and note the network path.
-2. Add that network path as a trusted catalog in Word:
-   - **File** → **Options** → **Trust Center** → **Trust Center Settings** →
-     **Trusted Add-in Catalogs** → **Add catalog** (check **Show in Menu**).
-3. Copy `manifest.xml` into the shared folder.
-4. In Word, go to **Home** → **Add-ins** → **Advanced** → **Shared Folder**,
-   then select the add-in and choose **Add**.
-
-For full screenshots and advanced options, see the Microsoft guide:
-https://learn.microsoft.com/en-us/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins
-
-If Word shows a "blocked because it isn't signed" error, the client does not
-trust your HTTPS cert. Follow the certificate trust steps above.
-
-### Sideload the Add-in (Word on Mac)
-
-1. Start the dev server: `npm start`
-2. Open Word → **Insert** → **Add-ins** → **My Add-ins**.
-3. Click **Add a custom add-in** → **Add from file...** and select `manifest.xml`.
-4. Trust the certificate in Keychain if prompted.
-
-### Scenarios: Same Machine vs Remote Machine
-
-**Scenario A: Word and the dev server are on the same machine**
-
-- Use `https://localhost:3000/...` in the manifest.
-- Generate a cert for `localhost`.
-- Trust the cert on that same machine.
-
-**Scenario B: Word is on a different machine (e.g., Windows PC accessing a Linux server)**
-
-- Use `https://<server-ip-or-hostname>:3000/...` in the manifest.
-- Generate a cert for your server's IP or hostname.
-- Copy the cert to the **Word client machine** and trust it there.
-- Ensure the server firewall allows inbound TCP 3000.
-
-### Notes
-
-- The manifest is generated from `manifest.template.xml` and output as
-  `manifest.xml` in the project root. Use the generated file for sideloading.
-- If the Word client cannot reach the server URL, verify network routing and
-  firewall rules allow inbound TCP 3000 on the server.
-- PEM files (`server.pem`, `server-key.pem`) are gitignored by default. Do not
-  commit private keys to the repo.
+---
 
 ## Project Structure
 
