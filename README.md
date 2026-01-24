@@ -199,9 +199,9 @@ See `ARCHITECTURE.md` for details.
 This project is dual-licensed:
 
 - **MIT License** applies to the Word add-in codebase.
-- **AGPLv3 License** applies to the `office-word-diff` library (used as a dependency).
+- **Apache 2.0 License** applies to the `office-word-diff` library (used as a dependency).
 
-See `LICENSE` and `LICENSE-AGPL` for details.
+See `LICENSE` and `LICENSE-APACHE` for details.
 
 ## Testing
 
