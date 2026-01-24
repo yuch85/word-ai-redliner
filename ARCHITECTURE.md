@@ -74,7 +74,7 @@ The diff engine will be modularized into a standalone library called
 
 - **Planned scope**: `src/lib/diff-wordmode.js` and
   `src/scripts/diff-strategies.js`.
-- **License**: AGPLv3 for the library, MIT for the add-in.
+- **License**: Apache 2.0 for the library, MIT for the add-in.
 
 ## Testing
 
