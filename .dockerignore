@@ -1,0 +1,15 @@
+.git
+.gitignore
+.env
+.env.*
+node_modules
+dist
+*.pem
+*.crt
+*.key
+*.log
+logs
+tests
+reference - office-word-diff
+.specstory
+.cursor
