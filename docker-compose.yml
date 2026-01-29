@@ -1,6 +1,6 @@
 services:
   word-ai-redliner:
-    image: ghcr.io/yuch85/word-ai-redliner:0.1.0
+    image: ghcr.io/yuch85/word-ai-redliner:0.1.1
     ports:
       - "3000:3000"
     env_file:
