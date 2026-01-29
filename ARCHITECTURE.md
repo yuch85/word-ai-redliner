@@ -22,7 +22,7 @@ src/
     verify-word-api.js     # Word API verification script
   taskpane/                # Main UI and interaction logic
 scripts/
-  generate-manifest.js     # Builds manifest.xml from template and .env
+  generate-manifest.cjs    # Builds manifest.xml from template and .env
 ```
 
 ## Runtime Flow
@@ -64,7 +64,7 @@ PORT=3000
 PROTOCOL=https
 ```
 
-The manifest generator (`scripts/generate-manifest.js`) runs from the webpack
+The manifest generator (`scripts/generate-manifest.cjs`) runs from the webpack
 config to keep `manifest.xml` in sync. `manifest.xml` is not tracked in git.
 
 ## Future Library Extraction
