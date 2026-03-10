@@ -15,6 +15,7 @@ export async function runAllVerifications(logCallback) {
         await verifyPlaceholderTest6(log);
         await verifyOoxmlInsertion(log);
         await verifyBlockDeletion(log);
+        await verifyBookmarkCommentSpike(log);
 
         log("=== All Verifications Completed ===");
     } catch (error) {
@@ -641,5 +642,180 @@ async function verifyBlockDeletion(log) {
         p2.delete();
         await context.sync();
     });
+}
+
+/**
+ * CMNT-11 Spike: Bookmark + Comment Verification
+ *
+ * Empirically validates:
+ * 1. Bookmark persistence under document edits
+ * 2. Comment insertion on a bookmarked range
+ * 3. Concurrent Word.run() behavior with multiple bookmark+comment operations
+ *
+ * Addresses STATE.md concern: "Concurrent Word.run() write behavior not fully
+ * documented by Microsoft -- validate empirically during implementation"
+ */
+async function verifyBookmarkCommentSpike(log) {
+    if (!Office.context.requirements.isSetSupported('WordApi', '1.4')) {
+        log('WARNING: WordApi 1.4 not available - skipping bookmark/comment spike');
+        return;
+    }
+
+    log("\n[Test 9] CMNT-11 Spike: Bookmark + Comment Verification");
+
+    // --- Part A: Bookmark persistence under edits ---
+    try {
+        await Word.run(async (context) => {
+            log("Step 1: Insert test paragraph");
+            const body = context.document.body;
+            const paragraph = body.insertParagraph(
+                "The quick brown fox jumps over the lazy dog.",
+                Word.InsertLocation.start
+            );
+            paragraph.insertParagraph("Test 9 - CMNT-11 Bookmark/Comment Spike", Word.InsertLocation.before);
+            await context.sync();
+
+            log("Step 2: Select 'brown fox' range and insert bookmark");
+            // Search for "brown fox" to get a range handle
+            const searchResults = paragraph.search("brown fox", { matchCase: true });
+            searchResults.load("items");
+            await context.sync();
+
+            if (searchResults.items.length === 0) {
+                log("FAIL: Could not find 'brown fox' in paragraph");
+                return;
+            }
+
+            const targetRange = searchResults.items[0];
+            targetRange.insertBookmark("_cqspike001");
+            await context.sync();
+            log("PASS: Bookmark '_cqspike001' inserted on 'brown fox'");
+
+            log("Step 3: Edit surrounding text (insert 'very ' before 'quick')");
+            const quickResults = paragraph.search("quick", { matchCase: true });
+            quickResults.load("items");
+            await context.sync();
+
+            if (quickResults.items.length > 0) {
+                quickResults.items[0].insertText("very ", Word.InsertLocation.before);
+                await context.sync();
+                log("PASS: Inserted 'very ' before 'quick'");
+            }
+
+            log("Step 4: Retrieve bookmarked range after edit");
+            const bookmarkRange = context.document.getBookmarkRangeOrNullObject("_cqspike001");
+            bookmarkRange.load("isNullObject,text");
+            await context.sync();
+
+            if (bookmarkRange.isNullObject) {
+                log("FAIL: Bookmark '_cqspike001' lost after surrounding text edit");
+            } else if (bookmarkRange.text === "brown fox") {
+                log("PASS: Bookmark range text is still 'brown fox' after surrounding edit");
+            } else {
+                log(`WARNING: Bookmark range text changed to '${bookmarkRange.text}' (expected 'brown fox')`);
+            }
+
+            log("Step 5: Insert comment on bookmarked range");
+            bookmarkRange.insertComment("Test comment from spike");
+            await context.sync();
+            log("PASS: Comment inserted on bookmarked range");
+
+            log("Step 6: Clean up bookmark");
+            context.document.deleteBookmark("_cqspike001");
+            await context.sync();
+            log("PASS: Bookmark '_cqspike001' deleted");
+        });
+    } catch (error) {
+        log(`FAIL: Part A error: ${error.message}`);
+        console.error(error);
+    }
+
+    // --- Part B: Concurrent bookmark+comment operations ---
+    try {
+        log("\nStep 7: Concurrent scenario - 3 bookmarks + 3 comments");
+
+        // Setup: insert 3 separate paragraphs with bookmarks
+        await Word.run(async (context) => {
+            const body = context.document.body;
+            const p1 = body.insertParagraph("First paragraph for concurrent test.", Word.InsertLocation.start);
+            const p2 = body.insertParagraph("Second paragraph for concurrent test.", Word.InsertLocation.start);
+            const p3 = body.insertParagraph("Third paragraph for concurrent test.", Word.InsertLocation.start);
+            await context.sync();
+
+            // Search and bookmark a word in each paragraph
+            const search1 = p1.search("First", { matchCase: true });
+            const search2 = p2.search("Second", { matchCase: true });
+            const search3 = p3.search("Third", { matchCase: true });
+            search1.load("items");
+            search2.load("items");
+            search3.load("items");
+            await context.sync();
+
+            if (search1.items.length > 0) search1.items[0].insertBookmark("_cqspike_a");
+            if (search2.items.length > 0) search2.items[0].insertBookmark("_cqspike_b");
+            if (search3.items.length > 0) search3.items[0].insertBookmark("_cqspike_c");
+            await context.sync();
+            log("PASS: 3 bookmarks inserted (_cqspike_a, _cqspike_b, _cqspike_c)");
+        });
+
+        log("Step 8: Fire 3 concurrent Word.run() calls for comment insertion");
+        const results = await Promise.all([
+            insertCommentOnBookmarkSpike("_cqspike_a", "Comment A from concurrent spike"),
+            insertCommentOnBookmarkSpike("_cqspike_b", "Comment B from concurrent spike"),
+            insertCommentOnBookmarkSpike("_cqspike_c", "Comment C from concurrent spike"),
+        ]);
+
+        let allPassed = true;
+        results.forEach((r, i) => {
+            const label = ["A", "B", "C"][i];
+            if (r.success) {
+                log(`PASS: Comment ${label} inserted on range '${r.rangeText}'`);
+            } else {
+                log(`FAIL: Comment ${label} insertion failed (rangeText: ${r.rangeText})`);
+                allPassed = false;
+            }
+        });
+
+        if (allPassed) {
+            log("PASS: All 3 concurrent comment insertions succeeded");
+        } else {
+            log("WARNING: Some concurrent comment insertions failed - Word.run serialization may have issues");
+        }
+
+    } catch (error) {
+        log(`FAIL: Part B (concurrent) error: ${error.message}`);
+        console.error(error);
+    }
+
+    log("[Test 9] CMNT-11 Spike Complete");
+}
+
+/**
+ * Helper for the concurrent spike: inserts a comment on a bookmarked range
+ * and deletes the bookmark, all within a single Word.run batch.
+ *
+ * @param {string} bookmarkName - The bookmark to look up
+ * @param {string} commentText - The comment text to insert
+ * @returns {Promise<{success: boolean, rangeText: string|null}>}
+ */
+async function insertCommentOnBookmarkSpike(bookmarkName, commentText) {
+    let result = { success: false, rangeText: null };
+    await Word.run(async (context) => {
+        const range = context.document.getBookmarkRangeOrNullObject(bookmarkName);
+        range.load('isNullObject,text');
+        await context.sync();
+
+        if (range.isNullObject) {
+            result = { success: false, rangeText: null };
+            return;
+        }
+
+        result.rangeText = range.text;
+        range.insertComment(commentText);
+        context.document.deleteBookmark(bookmarkName);
+        await context.sync();
+        result.success = true;
+    });
+    return result;
 }
 
