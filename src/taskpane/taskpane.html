@@ -23,30 +23,100 @@
             </div>
         </header>
 
-        <!-- Prompt Management -->
+        <!-- Prompt Management (Three-Category Tabbed Interface) -->
         <section class="prompt-section">
-            <div class="form-group">
-                <label for="promptSelect">Saved Prompts:</label>
-                <select id="promptSelect" class="form-control">
-                    <option value="">Select a prompt...</option>
-                </select>
+            <div class="prompt-tabs" role="tablist" aria-label="Prompt categories">
+                <button role="tab" id="tab-context" aria-selected="true" aria-controls="panel-context" class="prompt-tab active" tabindex="0">
+                    <span class="tab-dot" id="dot-context"></span>
+                    Context
+                </button>
+                <button role="tab" id="tab-amendment" aria-selected="false" aria-controls="panel-amendment" class="prompt-tab" tabindex="-1">
+                    <span class="tab-dot" id="dot-amendment"></span>
+                    Amendment
+                </button>
+                <button role="tab" id="tab-comment" aria-selected="false" aria-controls="panel-comment" class="prompt-tab" tabindex="-1">
+                    <span class="tab-dot" id="dot-comment"></span>
+                    Comment
+                </button>
             </div>
-            <div class="form-group">
-                <label for="promptTextarea">Prompt:</label>
-                <textarea id="promptTextarea" class="form-control" rows="6"
-                    placeholder="Enter your prompt here. Use {selection} to reference the selected text."></textarea>
+
+            <!-- Context Panel -->
+            <div role="tabpanel" id="panel-context" aria-labelledby="tab-context">
+                <div class="form-group">
+                    <select id="promptSelect-context" class="form-control">
+                        <option value="">(None)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <textarea id="promptTextarea-context" class="form-control" rows="6"
+                        placeholder="Enter overall context instructions (no {selection} placeholder needed)"></textarea>
+                </div>
+                <div class="button-group compact-toolbar">
+                    <button id="savePromptBtn-context" class="btn btn-compact">Save</button>
+                    <button id="deletePromptBtn-context" class="btn btn-compact">Delete</button>
+                    <button id="resetPromptBtn-context" class="btn btn-compact">Clear</button>
+                </div>
             </div>
-            <div class="button-group compact-toolbar">
-                <button id="savePromptBtn" class="btn btn-compact">💾 Save</button>
-                <button id="deletePromptBtn" class="btn btn-compact">🗑️ Delete</button>
-                <button id="resetPromptBtn" class="btn btn-compact">↺ Clear</button>
+
+            <!-- Amendment Panel -->
+            <div role="tabpanel" id="panel-amendment" aria-labelledby="tab-amendment" hidden>
+                <div class="form-group">
+                    <select id="promptSelect-amendment" class="form-control">
+                        <option value="">(None)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <textarea id="promptTextarea-amendment" class="form-control" rows="6"
+                        placeholder="Enter your prompt. Use {selection} to reference the selected text."></textarea>
+                </div>
+                <div class="button-group compact-toolbar">
+                    <button id="savePromptBtn-amendment" class="btn btn-compact">Save</button>
+                    <button id="deletePromptBtn-amendment" class="btn btn-compact">Delete</button>
+                    <button id="resetPromptBtn-amendment" class="btn btn-compact">Clear</button>
+                </div>
+            </div>
+
+            <!-- Comment Panel -->
+            <div role="tabpanel" id="panel-comment" aria-labelledby="tab-comment" hidden>
+                <div class="form-group">
+                    <select id="promptSelect-comment" class="form-control">
+                        <option value="">(None)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <textarea id="promptTextarea-comment" class="form-control" rows="6"
+                        placeholder="Enter your prompt. Use {selection} to reference the selected text."></textarea>
+                </div>
+                <div class="button-group compact-toolbar">
+                    <button id="savePromptBtn-comment" class="btn btn-compact">Save</button>
+                    <button id="deletePromptBtn-comment" class="btn btn-compact">Delete</button>
+                    <button id="resetPromptBtn-comment" class="btn btn-compact">Clear</button>
+                </div>
             </div>
         </section>
 
         <!-- Main Actions -->
         <section class="action-section">
-            <button id="reviewBtn" class="btn btn-primary btn-hero full-width">
-                Review Selection →
+            <div class="prompt-status-summary" id="promptStatusSummary">
+                <div class="status-line" data-category="context">
+                    <span class="status-dot inactive"></span>
+                    <span class="status-label">Context:</span>
+                    <span class="status-value">(none)</span>
+                </div>
+                <div class="status-line" data-category="amendment">
+                    <span class="status-dot inactive"></span>
+                    <span class="status-label">Amend:</span>
+                    <span class="status-value">(none)</span>
+                </div>
+                <div class="status-line" data-category="comment">
+                    <span class="status-dot inactive"></span>
+                    <span class="status-label">Comment:</span>
+                    <span class="status-value">(none)</span>
+                </div>
+            </div>
+            <button id="reviewBtn" class="btn btn-primary btn-hero full-width" disabled
+                title="Select an Amendment or Comment prompt to enable">
+                Review Selection
             </button>
         </section>
 
@@ -117,6 +187,7 @@
     <div id="savePromptModal" class="modal">
         <div class="modal-content">
             <h3>Save Prompt</h3>
+            <p id="savePromptCategory" class="modal-category-label"></p>
             <div class="form-group">
                 <label for="promptName">Prompt Name:</label>
                 <input type="text" id="promptName" class="form-control" placeholder="e.g., Legal Review">
