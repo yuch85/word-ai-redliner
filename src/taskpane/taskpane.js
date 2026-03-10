@@ -4,6 +4,7 @@
 import './taskpane.css';
 import { applyTokenMapStrategy, applySentenceDiffStrategy } from 'office-word-diff';
 import { sendPrompt, testConnection as llmTestConnection } from '../lib/llm-client.js';
+import { PromptManager, CATEGORIES } from '../lib/prompt-manager.js';
 
 // Global configuration (defaults from env, overridable via UI/localStorage)
 let config = {
@@ -32,7 +33,9 @@ function getActiveBackendConfig() {
     return config.backends[config.backend];
 }
 
-let prompts = [];
+const promptManager = new PromptManager();
+let currentTab = 'context';
+const unsavedText = { context: '', amendment: '', comment: '' };
 let isProcessing = false;
 
 Office.onReady((info) => {
@@ -42,11 +45,13 @@ Office.onReady((info) => {
 });
 
 function initialize() {
-    // Load saved settings and prompts
+    // Load saved settings
     loadSettings();
-    loadPrompts();
 
-    // Setup event listeners
+    // Load prompt state from localStorage
+    promptManager.loadState();
+
+    // Setup event listeners -- general
     document.getElementById("reviewBtn").onclick = handleReviewSelection;
     document.getElementById("saveSettingsBtn").onclick = saveSettings;
     document.getElementById("clearLogsBtn").onclick = clearLogs;
@@ -54,16 +59,61 @@ function initialize() {
     document.getElementById("runVerificationBtn").onclick = runVerification;
     document.getElementById("backendSelect").onchange = handleBackendSwitch;
 
-    // Prompt management
-    document.getElementById("promptSelect").onchange = handlePromptSelect;
-    document.getElementById("savePromptBtn").onclick = showSavePromptModal;
-    document.getElementById("deletePromptBtn").onclick = handleDeletePrompt;
-    document.getElementById("resetPromptBtn").onclick = handleResetPrompt;
-    document.getElementById("savePromptConfirmBtn").onclick = handleSavePrompt;
+    // Tab bar -- click and keyboard navigation
+    for (const category of CATEGORIES) {
+        const tabBtn = document.getElementById(`tab-${category}`);
+        tabBtn.addEventListener('click', () => switchTab(category));
+        tabBtn.addEventListener('keydown', handleTabKeydown);
+    }
+
+    // Per-category prompt controls
+    for (const category of CATEGORIES) {
+        document.getElementById(`promptSelect-${category}`).onchange = (e) => {
+            handleCategoryPromptSelect(category, e.target.value);
+        };
+        document.getElementById(`savePromptBtn-${category}`).onclick = () => {
+            showSavePromptModal(category);
+        };
+        document.getElementById(`deletePromptBtn-${category}`).onclick = () => {
+            handleDeletePromptConfirm(category);
+        };
+        document.getElementById(`resetPromptBtn-${category}`).onclick = () => {
+            handleResetPrompt(category);
+        };
+    }
+
+    // Status summary -- click to jump to tab
+    const statusLines = document.querySelectorAll('#promptStatusSummary .status-line');
+    statusLines.forEach((line) => {
+        line.addEventListener('click', () => {
+            const cat = line.getAttribute('data-category');
+            if (cat) {
+                switchTab(cat);
+            }
+        });
+    });
+
+    // Modal buttons
+    document.getElementById("savePromptConfirmBtn").onclick = handleSavePromptConfirm;
     document.getElementById("savePromptCancelBtn").onclick = hideSavePromptModal;
 
     // Initial UI state
     updateUIFromConfig();
+
+    // Render prompt UI from PromptManager state
+    renderAllDropdowns();
+    updateDotIndicators();
+    updateStatusSummary();
+    updateReviewButton();
+
+    // Restore unsaved text from active prompts on load
+    for (const category of CATEGORIES) {
+        const activePrompt = promptManager.getActivePrompt(category);
+        if (activePrompt) {
+            unsavedText[category] = activePrompt.template;
+            document.getElementById(`promptTextarea-${category}`).value = activePrompt.template;
+        }
+    }
 
     // Auto-test connection and load models
     testConnectionUI();
@@ -176,59 +226,23 @@ function toggleSettings() {
 }
 
 // ============================================================================
-// PROMPT MANAGEMENT
+// PROMPT MANAGEMENT (PromptManager Integration)
 // ============================================================================
 
-function initializeDefaultPrompts() {
-    return [
-        {
-            id: 'legal-review',
-            name: 'Legal Review',
-            template: 'Review and improve the following contract text for legal issues, ambiguities, and risks. Return ONLY the revised text with no explanations, commentary, or introductory phrases:\n\n{selection}',
-            description: 'Comprehensive legal review of contract text'
-        },
-        {
-            id: 'plain-english',
-            name: 'Plain English',
-            template: 'Rewrite the following legal text in plain, simple English while maintaining legal accuracy. Return ONLY the rewritten text with no explanations, commentary, or introductory phrases:\n\n{selection}',
-            description: 'Convert legal jargon to plain language'
-        }
-    ];
-}
+/**
+ * Populates the dropdown for a single category from PromptManager state.
+ * Selects the active prompt if one exists.
+ *
+ * @param {string} category - One of 'context', 'amendment', 'comment'
+ */
+function renderCategoryDropdown(category) {
+    const select = document.getElementById(`promptSelect-${category}`);
+    const prompts = promptManager.getPrompts(category);
+    const activePrompt = promptManager.getActivePrompt(category);
 
-async function loadPrompts() {
-    try {
-        // Try to fetch from server
-        const response = await fetch('/api/prompts', {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-        });
+    select.innerHTML = '<option value="">(None)</option>';
 
-        if (response.ok) {
-            prompts = await response.json();
-            addLog(`Loaded ${prompts.length} prompts from server`, "info");
-        } else {
-            throw new Error(`Server returned ${response.status}`);
-        }
-    } catch (error) {
-        // Fallback to localStorage or defaults
-        const saved = localStorage.getItem('wordAI.prompts');
-        if (saved) {
-            prompts = JSON.parse(saved);
-        } else {
-            prompts = initializeDefaultPrompts();
-        }
-    }
-    renderPrompts();
-}
-
-function renderPrompts() {
-    const select = document.getElementById('promptSelect');
-    const currentValue = select.value;
-
-    select.innerHTML = '<option value="">Select a prompt...</option>';
-
-    prompts.forEach(prompt => {
+    prompts.forEach((prompt) => {
         const option = document.createElement('option');
         option.value = prompt.id;
         option.textContent = prompt.name;
@@ -238,37 +252,220 @@ function renderPrompts() {
         select.appendChild(option);
     });
 
-    if (currentValue) {
-        select.value = currentValue;
+    // Select the active prompt in the dropdown
+    if (activePrompt) {
+        select.value = activePrompt.id;
     }
 }
 
-function handlePromptSelect(e) {
-    const promptId = e.target.value;
-    if (!promptId) return;
-
-    const prompt = prompts.find(p => p.id === promptId);
-    if (prompt) {
-        document.getElementById('promptTextarea').value = prompt.template;
-        addLog(`Loaded prompt: ${prompt.name}`, "info");
+/**
+ * Renders dropdowns for all three categories.
+ */
+function renderAllDropdowns() {
+    for (const category of CATEGORIES) {
+        renderCategoryDropdown(category);
     }
 }
 
-function showSavePromptModal() {
+/**
+ * Handles selecting a prompt from a category's dropdown.
+ * Auto-activates the selected prompt or deactivates if "(None)" is chosen.
+ *
+ * @param {string} category - One of 'context', 'amendment', 'comment'
+ * @param {string} promptId - The prompt ID, or empty string for "(None)"
+ */
+function handleCategoryPromptSelect(category, promptId) {
+    const textarea = document.getElementById(`promptTextarea-${category}`);
+
+    if (!promptId) {
+        // "(None)" selected -- deactivate category
+        promptManager.selectPrompt(category, null);
+        textarea.value = '';
+        unsavedText[category] = '';
+        addLog(`${capitalize(category)} prompt deactivated`, "info");
+    } else {
+        // Select and auto-activate prompt
+        const prompt = promptManager.selectPrompt(category, promptId);
+        if (prompt) {
+            textarea.value = prompt.template;
+            unsavedText[category] = prompt.template;
+            addLog(`Loaded ${category} prompt: ${prompt.name}`, "info");
+        }
+    }
+
+    updateDotIndicators();
+    updateStatusSummary();
+    updateReviewButton();
+}
+
+/**
+ * Switches to a different tab, preserving unsaved textarea edits.
+ *
+ * @param {string} category - The category tab to switch to
+ */
+function switchTab(category) {
+    if (category === currentTab) return;
+
+    // Save current textarea content before switching
+    const currentTextarea = document.getElementById(`promptTextarea-${currentTab}`);
+    unsavedText[currentTab] = currentTextarea.value;
+
+    // Update tab bar ARIA and styles
+    for (const cat of CATEGORIES) {
+        const tabBtn = document.getElementById(`tab-${cat}`);
+        const panel = document.getElementById(`panel-${cat}`);
+        const isTarget = (cat === category);
+
+        tabBtn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+        tabBtn.classList.toggle('active', isTarget);
+        tabBtn.tabIndex = isTarget ? 0 : -1;
+
+        if (isTarget) {
+            panel.removeAttribute('hidden');
+        } else {
+            panel.setAttribute('hidden', '');
+        }
+    }
+
+    currentTab = category;
+
+    // Restore textarea content for new tab
+    const newTextarea = document.getElementById(`promptTextarea-${category}`);
+    newTextarea.value = unsavedText[category];
+}
+
+/**
+ * Handles arrow key navigation within the tab bar per WAI-ARIA pattern.
+ *
+ * @param {KeyboardEvent} e
+ */
+function handleTabKeydown(e) {
+    const currentIndex = CATEGORIES.indexOf(currentTab);
+    let newIndex = currentIndex;
+
+    switch (e.key) {
+        case 'ArrowRight':
+            newIndex = (currentIndex + 1) % CATEGORIES.length;
+            break;
+        case 'ArrowLeft':
+            newIndex = (currentIndex - 1 + CATEGORIES.length) % CATEGORIES.length;
+            break;
+        case 'Home':
+            newIndex = 0;
+            break;
+        case 'End':
+            newIndex = CATEGORIES.length - 1;
+            break;
+        default:
+            return; // Don't prevent default for other keys
+    }
+
+    e.preventDefault();
+    const newCategory = CATEGORIES[newIndex];
+    document.getElementById(`tab-${newCategory}`).focus();
+    switchTab(newCategory);
+}
+
+/**
+ * Updates the dot indicators on each tab to reflect activation state.
+ * Green dot = active prompt, red dot = no active prompt.
+ */
+function updateDotIndicators() {
+    for (const category of CATEGORIES) {
+        const dot = document.getElementById(`dot-${category}`);
+        const isActive = promptManager.getActivePrompt(category) !== null;
+        dot.classList.toggle('active', isActive);
+    }
+}
+
+/**
+ * Updates the status summary widget above the Review button.
+ * Shows active prompt name or "(none)" for each category.
+ */
+function updateStatusSummary() {
+    const summary = document.getElementById('promptStatusSummary');
+
+    for (const category of CATEGORIES) {
+        const line = summary.querySelector(`.status-line[data-category="${category}"]`);
+        if (!line) continue;
+
+        const dot = line.querySelector('.status-dot');
+        const value = line.querySelector('.status-value');
+        const activePrompt = promptManager.getActivePrompt(category);
+
+        if (activePrompt) {
+            dot.classList.add('active');
+            value.textContent = activePrompt.name;
+        } else {
+            dot.classList.remove('active');
+            value.textContent = '(none)';
+        }
+    }
+}
+
+/**
+ * Updates the Review button label and enabled/disabled state
+ * based on the active mode from PromptManager.
+ *
+ * Labels: "Amend Selection \u2192" | "Comment on Selection \u2192" | "Amend & Comment \u2192" | "Review Selection" (disabled)
+ */
+function updateReviewButton() {
+    const btn = document.getElementById('reviewBtn');
+    const mode = promptManager.getActiveMode();
+
+    switch (mode) {
+        case 'amendment':
+            btn.textContent = 'Amend Selection \u2192';
+            btn.disabled = false;
+            btn.title = '';
+            break;
+        case 'comment':
+            btn.textContent = 'Comment on Selection \u2192';
+            btn.disabled = false;
+            btn.title = '';
+            break;
+        case 'both':
+            btn.textContent = 'Amend & Comment \u2192';
+            btn.disabled = false;
+            btn.title = '';
+            break;
+        case 'none':
+        default:
+            btn.textContent = 'Review Selection';
+            btn.disabled = true;
+            btn.title = 'Select an Amendment or Comment prompt to enable';
+            break;
+    }
+}
+
+/**
+ * Opens the save prompt modal with category context.
+ *
+ * @param {string} category - The category being saved to
+ */
+function showSavePromptModal(category) {
     document.getElementById('savePromptModal').classList.add('active');
+    document.getElementById('savePromptCategory').textContent = `Saving to: ${capitalize(category)}`;
     document.getElementById('promptName').value = '';
     document.getElementById('promptDescription').value = '';
     document.getElementById('promptName').focus();
 }
 
+/**
+ * Hides the save prompt modal.
+ */
 function hideSavePromptModal() {
     document.getElementById('savePromptModal').classList.remove('active');
 }
 
-async function handleSavePrompt() {
+/**
+ * Handles the Save button in the save prompt modal.
+ * Creates a new prompt in the current tab's category and auto-selects it.
+ */
+function handleSavePromptConfirm() {
     const name = document.getElementById('promptName').value.trim();
     const description = document.getElementById('promptDescription').value.trim();
-    const template = document.getElementById('promptTextarea').value.trim();
+    const template = document.getElementById(`promptTextarea-${currentTab}`).value.trim();
 
     if (!name) {
         addLog('Please enter a prompt name', "warning");
@@ -280,60 +477,65 @@ async function handleSavePrompt() {
         return;
     }
 
-    const id = name.toLowerCase().replace(/\s+/g, '-');
-    const newPrompt = { id, name, template, description };
+    const prompt = promptManager.addPrompt(currentTab, { name, template, description });
+    addLog(`Prompt saved: ${name} (${currentTab})`, "success");
 
-    // Update local array
-    const existingIndex = prompts.findIndex(p => p.id === id);
-    if (existingIndex !== -1) {
-        prompts[existingIndex] = newPrompt;
-    } else {
-        prompts.push(newPrompt);
-    }
-
-    // Save to localStorage
-    try {
-        localStorage.setItem('wordAI.prompts', JSON.stringify(prompts));
-        addLog(`Prompt saved: ${name}`, "success");
-    } catch (e) {
-        addLog(`Failed to save prompt: ${e.message}`, "error");
-    }
-
-    renderPrompts();
+    renderCategoryDropdown(currentTab);
     hideSavePromptModal();
 
-    document.getElementById('promptSelect').value = id;
+    // Auto-select the saved prompt
+    handleCategoryPromptSelect(currentTab, prompt.id);
+    document.getElementById(`promptSelect-${currentTab}`).value = prompt.id;
 }
 
-function handleDeletePrompt() {
-    const promptId = document.getElementById('promptSelect').value;
+/**
+ * Handles deleting the currently selected prompt in a category.
+ *
+ * @param {string} category - The category to delete from
+ */
+function handleDeletePromptConfirm(category) {
+    const select = document.getElementById(`promptSelect-${category}`);
+    const promptId = select.value;
+
     if (!promptId) {
-        addLog('No prompt selected', "warning");
+        addLog('No prompt selected to delete', "warning");
         return;
     }
 
-    const prompt = prompts.find(p => p.id === promptId);
+    const prompt = promptManager.getPrompt(category, promptId);
     if (!prompt) return;
 
-    if (confirm(`Delete prompt "${prompt.name}"?`)) {
-        prompts = prompts.filter(p => p.id !== promptId);
+    promptManager.deletePrompt(category, promptId);
+    addLog(`Prompt deleted: ${prompt.name} (${category})`, "success");
 
-        try {
-            localStorage.setItem('wordAI.prompts', JSON.stringify(prompts));
-            addLog(`Prompt deleted: ${prompt.name}`, "success");
-        } catch (e) {
-            addLog(`Failed to delete prompt: ${e.message}`, "error");
-        }
+    renderCategoryDropdown(category);
+    document.getElementById(`promptTextarea-${category}`).value = '';
+    unsavedText[category] = '';
 
-        renderPrompts();
-        document.getElementById('promptTextarea').value = '';
-    }
+    updateDotIndicators();
+    updateStatusSummary();
+    updateReviewButton();
 }
 
-function handleResetPrompt() {
-    document.getElementById('promptTextarea').value = '';
-    document.getElementById('promptSelect').value = '';
-    addLog('Prompt cleared', "info");
+/**
+ * Clears the textarea for a category without deactivating.
+ * User must select "(None)" from dropdown to deactivate.
+ *
+ * @param {string} category - The category to clear
+ */
+function handleResetPrompt(category) {
+    document.getElementById(`promptTextarea-${category}`).value = '';
+    unsavedText[category] = '';
+    addLog(`${capitalize(category)} prompt text cleared`, "info");
+}
+
+/**
+ * Capitalizes the first letter of a string.
+ * @param {string} str
+ * @returns {string}
+ */
+function capitalize(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 // ============================================================================
@@ -432,9 +634,19 @@ async function handleReviewSelection() {
         return;
     }
 
-    const promptText = document.getElementById("promptTextarea").value.trim();
+    // Check if submission is allowed (amendment or comment must be active)
+    if (!promptManager.canSubmit()) {
+        addLog("No amendment or comment prompt is active", "warning");
+        return;
+    }
+
+    // Get the active amendment prompt template for the current review flow.
+    // Plan 03 will replace this with full composition (context + amendment + comment).
+    const activeAmendment = promptManager.getActivePrompt('amendment');
+    const promptText = activeAmendment ? activeAmendment.template : '';
+
     if (!promptText) {
-        addLog("Please enter a prompt", "warning");
+        addLog("No active amendment prompt template found", "warning");
         return;
     }
 
@@ -497,6 +709,7 @@ async function handleReviewSelection() {
         isProcessing = false;
         btn.classList.remove("loading");
         btn.disabled = false;
+        updateReviewButton(); // Restore correct disabled state
     }
 }
 
