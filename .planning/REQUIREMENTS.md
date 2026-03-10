@@ -19,17 +19,17 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Prompt System
 
-- [ ] **PRMT-01**: Three prompt categories exist: Overall Context, Amendment, and Comment
-- [ ] **PRMT-02**: Each category has its own independent library of named prompts
-- [ ] **PRMT-03**: User can CRUD prompts within each category
-- [ ] **PRMT-04**: Maximum one active prompt per category (three total max active)
-- [ ] **PRMT-05**: Overall Context prompt is optional (can be deactivated)
-- [ ] **PRMT-06**: At least one of Amendment or Comment prompt must be active
+- [x] **PRMT-01**: Three prompt categories exist: Overall Context, Amendment, and Comment
+- [x] **PRMT-02**: Each category has its own independent library of named prompts
+- [x] **PRMT-03**: User can CRUD prompts within each category
+- [x] **PRMT-04**: Maximum one active prompt per category (three total max active)
+- [x] **PRMT-05**: Overall Context prompt is optional (can be deactivated)
+- [x] **PRMT-06**: At least one of Amendment or Comment prompt must be active
 - [ ] **PRMT-07**: Active Context prompt composed as system message in chat completions request
-- [ ] **PRMT-08**: Amendment prompt uses `{selection}` placeholder (existing behavior)
-- [ ] **PRMT-09**: Comment prompt uses `{selection}` placeholder
-- [ ] **PRMT-10**: Existing prompts automatically migrated to Amendment category on first load
-- [ ] **PRMT-11**: Prompt libraries persist in localStorage with same server-sync fallback pattern
+- [x] **PRMT-08**: Amendment prompt uses `{selection}` placeholder (existing behavior)
+- [x] **PRMT-09**: Comment prompt uses `{selection}` placeholder
+- [x] **PRMT-10**: Existing prompts automatically migrated to Amendment category on first load
+- [x] **PRMT-11**: Prompt libraries persist in localStorage with same server-sync fallback pattern
 
 ### Comment Insertion
 
@@ -91,17 +91,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LLM-05 | Phase 1 | Complete |
 | LLM-06 | Phase 1 | Pending |
 | LLM-07 | Phase 1 | Pending |
-| PRMT-01 | Phase 2 | Pending |
-| PRMT-02 | Phase 2 | Pending |
-| PRMT-03 | Phase 2 | Pending |
-| PRMT-04 | Phase 2 | Pending |
-| PRMT-05 | Phase 2 | Pending |
-| PRMT-06 | Phase 2 | Pending |
+| PRMT-01 | Phase 2 | Complete |
+| PRMT-02 | Phase 2 | Complete |
+| PRMT-03 | Phase 2 | Complete |
+| PRMT-04 | Phase 2 | Complete |
+| PRMT-05 | Phase 2 | Complete |
+| PRMT-06 | Phase 2 | Complete |
 | PRMT-07 | Phase 2 | Pending |
-| PRMT-08 | Phase 2 | Pending |
-| PRMT-09 | Phase 2 | Pending |
-| PRMT-10 | Phase 2 | Pending |
-| PRMT-11 | Phase 2 | Pending |
+| PRMT-08 | Phase 2 | Complete |
+| PRMT-09 | Phase 2 | Complete |
+| PRMT-10 | Phase 2 | Complete |
+| PRMT-11 | Phase 2 | Complete |
 | CMNT-01 | Phase 3 | Pending |
 | CMNT-02 | Phase 3 | Pending |
 | CMNT-03 | Phase 3 | Pending |
