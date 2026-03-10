@@ -5,6 +5,8 @@ import './taskpane.css';
 import { applyTokenMapStrategy, applySentenceDiffStrategy } from 'office-word-diff';
 import { sendPrompt, testConnection as llmTestConnection } from '../lib/llm-client.js';
 import { PromptManager, CATEGORIES } from '../lib/prompt-manager.js';
+import { CommentQueue } from '../lib/comment-queue.js';
+import { fireCommentRequest } from '../lib/comment-request.js';
 
 // Global configuration (defaults from env, overridable via UI/localStorage)
 let config = {
@@ -38,6 +40,7 @@ let currentTab = 'context';
 const unsavedText = { context: '', amendment: '', comment: '' };
 let isProcessing = false;
 let supportsComments = false;  // Set during initialize() via WordApi 1.4 check
+const commentQueue = new CommentQueue(addLog);
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
@@ -684,10 +687,16 @@ async function handleReviewSelection() {
     const btn = document.getElementById("reviewBtn");
     const activeMode = promptManager.getActiveMode();
 
+    // Only block UI for amendment (synchronous) operations
+    // Comment-only mode is non-blocking (fire-and-forget)
+    const needsBlocking = (activeMode === 'amendment' || activeMode === 'both');
+
     try {
-        isProcessing = true;
-        btn.classList.add("loading");
-        btn.disabled = true;
+        if (needsBlocking) {
+            isProcessing = true;
+            btn.classList.add("loading");
+            btn.disabled = true;
+        }
 
         // 1. Get Selection
         let selectionText = "";
@@ -704,7 +713,7 @@ async function handleReviewSelection() {
         addLog(`Processing selection (${selectionText.length} chars)...`, "info");
 
         // 2. Compose and send prompt
-        // Amendment execution (existing workflow)
+        // Amendment execution (existing synchronous workflow)
         if (activeMode === 'amendment' || activeMode === 'both') {
             const messages = promptManager.composeMessages(selectionText, 'amendment');
 
@@ -747,24 +756,38 @@ async function handleReviewSelection() {
             addLog("Changes applied successfully", "success");
         }
 
-        // Comment execution -- Phase 3 will implement async comment queue.
-        // For now, log that comment is active but not yet implemented.
+        // Comment execution -- fire-and-forget via comment queue
+        // Comment prompt receives the ORIGINAL selectionText (not amended text)
         if (activeMode === 'comment' || activeMode === 'both') {
-            if (activeMode === 'comment') {
-                // Comment-only mode -- Phase 3 will handle this
-                addLog("Comment prompt is active. Comment insertion will be available in a future update.", "info");
+            if (!supportsComments) {
+                addLog("Comment features require Word API 1.4", "warning");
             } else {
-                // Both mode -- amendment already executed above; comment deferred to Phase 3
-                addLog("Amendment applied. Comment insertion will follow in a future update.", "info");
+                // Fire comment request asynchronously (NO await -- fire-and-forget)
+                const backendConfig = getActiveBackendConfig();
+                fireCommentRequest(selectionText, {
+                    config: backendConfig,
+                    sendPromptFn: sendPrompt,
+                    promptManager: promptManager,
+                    commentQueue: commentQueue,
+                    log: addLog,
+                    addLogWithRetryFn: addLogWithRetry,
+                    updateStatusBarFn: updateCommentStatusBar
+                });
+
+                if (activeMode === 'both') {
+                    addLog('Amendment applied. Comment request fired...', 'info');
+                }
             }
         }
 
     } catch (error) {
         addLog(`Error: ${error.message}`, "error");
     } finally {
-        isProcessing = false;
-        btn.classList.remove("loading");
-        updateReviewButton();
+        if (needsBlocking) {
+            isProcessing = false;
+            btn.classList.remove("loading");
+            updateReviewButton();
+        }
     }
 }
 
