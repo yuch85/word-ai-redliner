@@ -3,15 +3,34 @@
 // Import CSS for webpack to bundle
 import './taskpane.css';
 import { applyTokenMapStrategy, applySentenceDiffStrategy } from 'office-word-diff';
+import { sendPrompt, testConnection as llmTestConnection } from '../lib/llm-client.js';
 
 // Global configuration (defaults from env, overridable via UI/localStorage)
 let config = {
-    ollamaUrl: process.env.DEFAULT_OLLAMA_URL || '/ollama',
-    apiKey: '',
-    selectedModel: process.env.DEFAULT_MODEL || 'gpt-oss:20b',
+    backend: 'ollama',
     trackChangesEnabled: true,
-    lineDiffEnabled: false
+    lineDiffEnabled: false,
+    backends: {
+        ollama: {
+            url: process.env.DEFAULT_OLLAMA_URL || '/ollama',
+            apiKey: '',
+            model: process.env.DEFAULT_MODEL || 'gpt-oss:20b'
+        },
+        vllm: {
+            url: process.env.DEFAULT_VLLM_URL || '/vllm',
+            apiKey: '',
+            model: process.env.DEFAULT_VLLM_MODEL || 'qwen3.5-35b-a3b'
+        }
+    }
 };
+
+/**
+ * Returns the config object for the currently selected backend.
+ * @returns {{ url: string, apiKey: string, model: string }}
+ */
+function getActiveBackendConfig() {
+    return config.backends[config.backend];
+}
 
 let prompts = [];
 let isProcessing = false;
@@ -33,6 +52,7 @@ function initialize() {
     document.getElementById("clearLogsBtn").onclick = clearLogs;
     document.getElementById("settingsToggle").onclick = toggleSettings;
     document.getElementById("runVerificationBtn").onclick = runVerification;
+    document.getElementById("backendSelect").onchange = handleBackendSwitch;
 
     // Prompt management
     document.getElementById("promptSelect").onchange = handlePromptSelect;
@@ -46,7 +66,7 @@ function initialize() {
     updateUIFromConfig();
 
     // Auto-test connection and load models
-    testConnection();
+    testConnectionUI();
 
     addLog("Contract Review Add-in initialized.", "info");
 }
@@ -60,7 +80,25 @@ function loadSettings() {
         const saved = localStorage.getItem('wordAI.config');
         if (saved) {
             const parsed = JSON.parse(saved);
-            config = { ...config, ...parsed };
+
+            if (parsed.ollamaUrl && !parsed.backends) {
+                // Old flat format detected -- migrate to nested backends structure
+                config.backend = 'ollama';
+                config.backends.ollama.url = parsed.ollamaUrl;
+                config.backends.ollama.apiKey = parsed.apiKey || '';
+                config.backends.ollama.model = parsed.selectedModel || config.backends.ollama.model;
+                if (typeof parsed.trackChangesEnabled === 'boolean') {
+                    config.trackChangesEnabled = parsed.trackChangesEnabled;
+                }
+                if (typeof parsed.lineDiffEnabled === 'boolean') {
+                    config.lineDiffEnabled = parsed.lineDiffEnabled;
+                }
+                // Save migrated config immediately so migration only runs once
+                localStorage.setItem('wordAI.config', JSON.stringify(config));
+            } else {
+                // New nested format -- merge normally
+                config = { ...config, ...parsed };
+            }
         }
     } catch (e) {
         console.error("Failed to load settings:", e);
@@ -68,36 +106,66 @@ function loadSettings() {
 }
 
 function saveSettings() {
-    const ollamaUrl = document.getElementById("ollamaUrl").value.trim();
+    const backend = document.getElementById("backendSelect").value;
+    const endpointUrl = document.getElementById("endpointUrl").value.trim();
     const apiKey = document.getElementById("apiKey").value.trim();
     const trackChanges = document.getElementById("trackChangesCheckbox").checked;
     const lineDiff = document.getElementById("lineDiffCheckbox").checked;
     const selectedModel = document.getElementById("modelSelect").value;
 
-    config = {
-        ollamaUrl: ollamaUrl || process.env.DEFAULT_OLLAMA_URL || '/ollama',
-        apiKey: apiKey,
-        selectedModel: selectedModel || config.selectedModel,
-        trackChangesEnabled: trackChanges,
-        lineDiffEnabled: lineDiff
-    };
+    config.backend = backend;
+    config.backends[backend].url = endpointUrl || config.backends[backend].url;
+    config.backends[backend].apiKey = apiKey;
+    // Only update model for Ollama -- vLLM model is read-only
+    if (backend === 'ollama') {
+        config.backends[backend].model = selectedModel || config.backends[backend].model;
+    }
+    config.trackChangesEnabled = trackChanges;
+    config.lineDiffEnabled = lineDiff;
 
     try {
         localStorage.setItem('wordAI.config', JSON.stringify(config));
         addLog("Settings saved.", "success");
 
         // Re-test connection with new settings
-        testConnection();
+        testConnectionUI();
     } catch (e) {
         addLog(`Failed to save settings: ${e.message}`, "error");
     }
 }
 
 function updateUIFromConfig() {
-    document.getElementById("ollamaUrl").value = config.ollamaUrl;
-    document.getElementById("apiKey").value = config.apiKey;
+    const backendConfig = getActiveBackendConfig();
+    const modelSelect = document.getElementById("modelSelect");
+
+    document.getElementById("backendSelect").value = config.backend;
+    document.getElementById("endpointUrl").value = backendConfig.url;
+    document.getElementById("apiKey").value = backendConfig.apiKey;
     document.getElementById("trackChangesCheckbox").checked = config.trackChangesEnabled;
     document.getElementById("lineDiffCheckbox").checked = config.lineDiffEnabled;
+
+    if (config.backend === 'vllm') {
+        // vLLM: show configured model as read-only (disabled dropdown)
+        modelSelect.innerHTML = '';
+        const option = document.createElement('option');
+        option.value = backendConfig.model;
+        option.textContent = backendConfig.model;
+        modelSelect.appendChild(option);
+        modelSelect.disabled = true;
+    } else {
+        // Ollama: enable dropdown (models populated by testConnectionUI)
+        modelSelect.disabled = false;
+    }
+}
+
+/**
+ * Handles switching between backends in the UI.
+ * Restores the selected backend's saved settings and triggers a connection test.
+ */
+function handleBackendSwitch() {
+    config.backend = document.getElementById('backendSelect').value;
+    updateUIFromConfig();
+    testConnectionUI();
 }
 
 function toggleSettings() {
@@ -272,49 +340,62 @@ function handleResetPrompt() {
 // CONNECTION & MODEL MANAGEMENT
 // ============================================================================
 
-async function testConnection() {
+/**
+ * Tests connection to the active LLM backend and populates models.
+ * Uses the unified llm-client.js testConnection function.
+ */
+async function testConnectionUI() {
     const indicator = document.getElementById("statusIndicator");
     const statusText = document.getElementById("statusText");
+    const backendConfig = getActiveBackendConfig();
+    const backendLabel = config.backend === 'vllm' ? 'vLLM' : 'Ollama';
 
     indicator.className = "status-indicator";
     statusText.textContent = "Connecting...";
 
     try {
-        let url = config.ollamaUrl;
-        if (!url.endsWith('/')) url += '/';
-        url += 'api/tags';
+        const result = await llmTestConnection(backendConfig);
 
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                ...(config.apiKey ? { 'Authorization': `Bearer ${config.apiKey}` } : {})
-            }
-        });
+        indicator.classList.add("connected");
+        statusText.textContent = `${backendLabel}: Connected`;
+        addLog(`Connected to ${backendLabel}! Found ${result.models.length} model(s).`, "success");
 
-        if (response.ok) {
-            const data = await response.json();
-            const models = data.models || [];
+        // Populate model dropdown
+        populateModels(result.models);
 
-            indicator.classList.add("connected");
-            statusText.textContent = "Connected";
-            addLog(`Connected to Ollama! Found ${models.length} models.`, "success");
-
-            // Populate model dropdown
-            populateModels(models);
-        } else {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        if (config.backend === 'vllm') {
+            // vLLM: set model to configured value as read-only
+            const modelSelect = document.getElementById("modelSelect");
+            modelSelect.innerHTML = '';
+            const option = document.createElement('option');
+            option.value = backendConfig.model;
+            option.textContent = backendConfig.model;
+            modelSelect.appendChild(option);
+            modelSelect.disabled = true;
         }
     } catch (error) {
         indicator.classList.add("error");
-        statusText.textContent = "Connection Error";
-        addLog(`Connection failed: ${error.message}`, "error");
+
+        // Handle auth-specific errors
+        if (error.message && (error.message.includes('401') || error.message.includes('403'))) {
+            statusText.textContent = `${backendLabel}: API key required`;
+            addLog(`${backendLabel} authentication failed: ${error.message}`, "error");
+        } else {
+            statusText.textContent = `${backendLabel}: Connection Error`;
+            addLog(`${backendLabel} connection failed: ${error.message}`, "error");
+        }
+
         console.error("Connection error:", error);
     }
 }
 
+/**
+ * Populates the model dropdown from the /v1/models response.
+ * Models use OpenAI format: { id: "model-name" }.
+ */
 function populateModels(models) {
     const select = document.getElementById("modelSelect");
+    const activeModel = getActiveBackendConfig().model;
     select.innerHTML = '';
 
     if (models.length === 0) {
@@ -324,69 +405,26 @@ function populateModels(models) {
 
     models.forEach(model => {
         const option = document.createElement('option');
-        option.value = model.name;
-        option.textContent = model.name;
-        if (model.name === config.selectedModel) {
+        option.value = model.id;
+        option.textContent = model.id;
+        if (model.id === activeModel) {
             option.selected = true;
         }
         select.appendChild(option);
     });
 
-    // If selected model not in list, select first or default to gpt-oss:20b
-    const modelNames = models.map(m => m.name);
-    if (!modelNames.includes(config.selectedModel)) {
-        const gptOss = modelNames.find(n => n.includes('gpt-oss:20b'));
-        config.selectedModel = gptOss || modelNames[0];
-        select.value = config.selectedModel;
+    // If selected model not in list, select first available
+    const modelIds = models.map(m => m.id);
+    if (!modelIds.includes(activeModel)) {
+        const fallback = modelIds[0];
+        config.backends[config.backend].model = fallback;
+        select.value = fallback;
     }
 }
 
 // ============================================================================
 // LLM INTEGRATION
 // ============================================================================
-
-async function sendPromptToLLM(prompt, selection) {
-    const fullPrompt = prompt.replace(/{selection}/g, selection);
-
-    let url = config.ollamaUrl;
-    if (!url.endsWith('/')) url += '/';
-    url += 'api/generate';
-
-    addLog(`Sending to LLM (model: ${config.selectedModel})...`, "info");
-
-    return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', url, true);
-        xhr.setRequestHeader('Content-Type', 'application/json');
-
-        if (config.apiKey) {
-            xhr.setRequestHeader('Authorization', `Bearer ${config.apiKey}`);
-        }
-
-        xhr.onload = function () {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                    const data = JSON.parse(xhr.responseText);
-                    resolve(data.response);
-                } catch (e) {
-                    reject(new Error(`Parse error: ${e.message}`));
-                }
-            } else {
-                reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
-            }
-        };
-
-        xhr.onerror = () => reject(new Error('Network error'));
-        xhr.ontimeout = () => reject(new Error('Request timeout'));
-        xhr.timeout = 60000; // 60 seconds
-
-        xhr.send(JSON.stringify({
-            model: config.selectedModel,
-            prompt: fullPrompt,
-            stream: false
-        }));
-    });
-}
 
 async function handleReviewSelection() {
     if (isProcessing) {
@@ -422,10 +460,12 @@ async function handleReviewSelection() {
 
         addLog(`Processing selection (${selectionText.length} chars)...`, "info");
 
-        // 2. Call LLM
-        const response = await sendPromptToLLM(promptText, selectionText);
+        // 2. Call LLM via unified client
+        const backendConfig = getActiveBackendConfig();
+        const fullPrompt = promptText.replace(/{selection}/g, selectionText);
+        const response = await sendPrompt(backendConfig, fullPrompt, addLog);
 
-        addLog("✅ LLM Response received", "success");
+        addLog("LLM Response received", "success");
         addLog(`Response: ${response.substring(0, 100)}${response.length > 100 ? '...' : ''}`, "info");
 
         // 3. Apply Diff Logic
@@ -449,7 +489,7 @@ async function handleReviewSelection() {
             }
         });
 
-        addLog("✅ Changes applied successfully", "success");
+        addLog("Changes applied successfully", "success");
 
     } catch (error) {
         addLog(`Error: ${error.message}`, "error");
