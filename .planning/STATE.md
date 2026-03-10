@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in-progress
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-10T19:02:19Z"
+status: executing
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-10T19:06:11.951Z"
 last_activity: 2026-03-10 -- Plan 03-02 executed (comment status bar UI, WordApi 1.4 detection, retry link)
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 75
 ---
 
@@ -52,6 +52,7 @@ Progress: [████████░░] 75%
 - Trend: stable (accelerating)
 
 *Updated after each plan completion*
+| Phase 03 P01 | 4 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,9 @@ Recent decisions affecting current work:
 - [Phase 03-02]: Reused existing @keyframes spin from CSS loading state (no duplicate)
 - [Phase 03-02]: WordApi 1.4 detection placed after UI render so DOM elements exist before potential hide
 - [Phase 03-02]: addLogWithRetry removes its own error entry on retry click for clean activity log
+- [Phase 03-01]: ESM exports for comment-queue.js (matching project convention, not CommonJS as plan specified)
+- [Phase 03-01]: Pending count derived from array length (no separate counter) to prevent drift per Pitfall 6
+- [Phase 03-01]: Bookmark naming: _cq prefix + hex timestamp + 4 random alphanumeric chars (hidden, max 40 chars)
 
 ### Pending Todos
 
@@ -90,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T19:02:19Z
-Stopped at: Completed 03-02-PLAN.md
-Resume file: .planning/phases/03-async-comment-queue/03-02-SUMMARY.md
+Last session: 2026-03-10T19:06:11.950Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None

@@ -35,15 +35,15 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [ ] **CMNT-01**: Comment prompt sends selected text to LLM and receives analysis text
 - [ ] **CMNT-02**: LLM analysis inserted as Word comment on the selected range via `Range.insertComment()`
-- [ ] **CMNT-03**: Selected range captured at request time (before async LLM call) using hidden bookmarks
-- [ ] **CMNT-04**: Comment attaches to correct location even after user moves cursor to different text
-- [ ] **CMNT-05**: User can fire multiple concurrent comment requests without waiting for previous to complete
+- [x] **CMNT-03**: Selected range captured at request time (before async LLM call) using hidden bookmarks
+- [x] **CMNT-04**: Comment attaches to correct location even after user moves cursor to different text
+- [x] **CMNT-05**: User can fire multiple concurrent comment requests without waiting for previous to complete
 - [x] **CMNT-06**: UI displays count of in-flight comment requests
-- [ ] **CMNT-07**: Comments appear silently on the original range when LLM responds (no interruption)
-- [ ] **CMNT-08**: Hidden bookmarks cleaned up after comment insertion
+- [x] **CMNT-07**: Comments appear silently on the original range when LLM responds (no interruption)
+- [x] **CMNT-08**: Hidden bookmarks cleaned up after comment insertion
 - [ ] **CMNT-09**: When both Amendment and Comment are active on same selection, amendment executes first, then comment fires async
 - [x] **CMNT-10**: WordApi 1.4 runtime detection — comment features gracefully disabled if unsupported
-- [ ] **CMNT-11**: Prototype spike validates bookmark range persistence under document edits before full implementation
+- [x] **CMNT-11**: Prototype spike validates bookmark range persistence under document edits before full implementation
 
 ## v2 Requirements
 
@@ -104,15 +104,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PRMT-11 | Phase 2 | Complete |
 | CMNT-01 | Phase 3 | Pending |
 | CMNT-02 | Phase 3 | Pending |
-| CMNT-03 | Phase 3 | Pending |
-| CMNT-04 | Phase 3 | Pending |
-| CMNT-05 | Phase 3 | Pending |
+| CMNT-03 | Phase 3 | Complete |
+| CMNT-04 | Phase 3 | Complete |
+| CMNT-05 | Phase 3 | Complete |
 | CMNT-06 | Phase 3 | Complete |
-| CMNT-07 | Phase 3 | Pending |
-| CMNT-08 | Phase 3 | Pending |
+| CMNT-07 | Phase 3 | Complete |
+| CMNT-08 | Phase 3 | Complete |
 | CMNT-09 | Phase 3 | Pending |
 | CMNT-10 | Phase 3 | Complete |
-| CMNT-11 | Phase 3 | Pending |
+| CMNT-11 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 29 total
