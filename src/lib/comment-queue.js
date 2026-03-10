@@ -106,4 +106,4 @@ function generateBookmarkName() {
     return `_cq${timestamp}${random}`;
 }
 
-module.exports = { CommentQueue, generateBookmarkName };
+export { CommentQueue, generateBookmarkName };
