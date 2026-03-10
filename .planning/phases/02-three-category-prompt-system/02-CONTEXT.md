@@ -8,6 +8,23 @@
 
 Replace the single-prompt model with three independent prompt libraries (Overall Context, Amendment, Comment) with activation rules. Users manage prompts within each category via a tabbed interface, with clear visual feedback on what's active. No migration of existing prompts — start fresh.
 
+### Dependency Boundary (Phase 1 concurrency)
+
+**No Phase 1 dependency (~80% of work):**
+- Tabbed UI (three tabs, dot indicators, tab switching)
+- Per-category prompt libraries (CRUD, dropdown, textarea, save/delete/clear)
+- Activation logic (auto-activate on select, "(None)" to deactivate)
+- Status summary widget (active prompt display, clickable navigation)
+- Dynamic Review button label and disabled-state validation
+- localStorage persistence for three separate prompt libraries
+
+**Requires Phase 1's unified LLM client (~20% of work):**
+- Composing chat completions request: Context prompt → system message, Amendment/Comment prompt → user message with `{selection}`
+- Wiring composed prompt into `sendPromptToLLM()` (or its Phase 1 replacement)
+- The dual-action flow when both Amendment and Comment are active (amend first, then fire comment — also touches Phase 3)
+
+**Planning note:** Plans can split along this boundary. UI/state plans execute immediately; composition/integration plan executes after Phase 1 lands.
+
 </domain>
 
 <decisions>
