@@ -38,13 +38,10 @@ created: 2026-03-10
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 01-01-01 | 01 | 1 | LLM-01 | unit | `npx jest tests/llm-client.spec.js -t "backend selection" -x` | ❌ W0 | ⬜ pending |
-| 01-01-02 | 01 | 1 | LLM-02 | unit | `npx jest tests/llm-client.spec.js -t "request format" -x` | ❌ W0 | ⬜ pending |
-| 01-01-03 | 01 | 1 | LLM-03 | unit | `npx jest tests/llm-client.spec.js -t "unified client" -x` | ❌ W0 | ⬜ pending |
-| 01-01-04 | 01 | 1 | LLM-04 | manual-only | Manual: start dev server, curl `/vllm/v1/models` | N/A | ⬜ pending |
-| 01-01-05 | 01 | 1 | LLM-05 | unit | `npx jest tests/llm-client.spec.js -t "stripThinkTags" -x` | ❌ W0 | ⬜ pending |
-| 01-01-06 | 01 | 1 | LLM-06 | unit | `npx jest tests/llm-client.spec.js -t "testConnection" -x` | ❌ W0 | ⬜ pending |
-| 01-01-07 | 01 | 1 | LLM-07 | unit | `npx jest tests/llm-client.spec.js -t "config migration" -x` | ❌ W0 | ⬜ pending |
+| 01-01-T1 | 01 | 1 | LLM-02, LLM-03, LLM-05 | unit | `npx jest tests/llm-client.spec.js -t "request format\|unified client\|stripThinkTags" -x` | ❌ W0 | ⬜ pending |
+| 01-01-T2 | 01 | 1 | LLM-04 | manual-only | Manual: start dev server, curl `/vllm/v1/models` | N/A | ⬜ pending |
+| 01-02-T1 | 02 | 2 | LLM-01, LLM-06, LLM-07 | unit + integration | `npx jest tests/llm-client.spec.js -t "backend selection\|testConnection\|config migration" -x` | ❌ W0 | ⬜ pending |
+| 01-02-T3 | 02 | 2 | LLM-01, LLM-06, LLM-07 | human-verify | Manual: switch backends, test connection, verify persistence | N/A | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

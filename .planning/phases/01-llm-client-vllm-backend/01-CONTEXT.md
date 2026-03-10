@@ -23,7 +23,7 @@ Extract LLM logic from monolithic taskpane.js into a unified client abstraction,
 
 ### Connection & Model Browsing
 - Auto-test connection when user switches backends (mirrors existing startup behavior)
-- Model dropdown for Ollama: fetches model list from `/api/tags` as today
+- Model dropdown for Ollama: fetches model list from `/v1/models` (unified endpoint for both backends — confirmed during plan review)
 - vLLM is single-model per container — no model listing API needed
 - When vLLM is selected, model dropdown shows the configured model name as read-only (disabled/greyed out)
 - Connection status indicator shows backend name: "Ollama: Connected" or "vLLM: Connected"
