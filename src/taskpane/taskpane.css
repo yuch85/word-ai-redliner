@@ -223,6 +223,12 @@ select.form-control {
     cursor: pointer;
 }
 
+select.form-control:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: var(--tertiary-bg);
+}
+
 input[type="checkbox"] {
     width: 16px;
     height: 16px;

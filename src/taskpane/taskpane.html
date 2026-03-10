@@ -58,15 +58,22 @@
             </div>
             <div class="collapsible-content" id="settingsContent">
                 <div class="form-group">
+                    <label for="backendSelect">LLM Backend:</label>
+                    <select id="backendSelect" class="form-control">
+                        <option value="ollama">Ollama</option>
+                        <option value="vllm">vLLM</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="modelSelect">Model:</label>
                     <select id="modelSelect" class="form-control">
                         <option value="">Loading models...</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="ollamaUrl">Ollama URL:</label>
-                    <input type="text" id="ollamaUrl" class="form-control" placeholder="/ollama">
-                    <small class="help-text">Use /ollama for local proxy</small>
+                    <label for="endpointUrl">Endpoint URL:</label>
+                    <input type="text" id="endpointUrl" class="form-control" placeholder="e.g., /ollama or /vllm">
+                    <small class="help-text">Proxy path for the selected backend</small>
                 </div>
                 <div class="form-group">
                     <label for="apiKey">API Key (Optional):</label>
