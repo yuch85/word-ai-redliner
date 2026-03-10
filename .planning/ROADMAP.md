@@ -62,11 +62,12 @@ Plans:
   4. When both Amendment and Comment prompts are active, selecting text and submitting applies tracked changes first then fires the comment request asynchronously
   5. Comment features are gracefully hidden on Word versions that lack WordApi 1.4 support, with no errors or broken UI
 
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — TDD: CommentQueue module with state management, bookmark helpers, and CMNT-11 spike
+- [ ] 03-02-PLAN.md — Status bar UI, WordApi 1.4 detection, and addLogWithRetry extension
+- [ ] 03-03-PLAN.md — Integration: wire comment queue + LLM client + prompt system into fire-and-forget workflow
 
 ## Progress
 
@@ -77,4 +78,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. LLM Client + vLLM Backend | 1/2 | In Progress | - |
 | 2. Three-Category Prompt System | 0/3 | Planning complete | - |
-| 3. Async Comment Queue | 0/? | Not started | - |
+| 3. Async Comment Queue | 0/3 | Planning complete | - |
