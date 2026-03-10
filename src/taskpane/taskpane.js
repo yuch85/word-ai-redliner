@@ -37,6 +37,7 @@ const promptManager = new PromptManager();
 let currentTab = 'context';
 const unsavedText = { context: '', amendment: '', comment: '' };
 let isProcessing = false;
+let supportsComments = false;  // Set during initialize() via WordApi 1.4 check
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
@@ -105,6 +106,22 @@ function initialize() {
     updateDotIndicators();
     updateStatusSummary();
     updateReviewButton();
+
+    // Detect WordApi 1.4 support for comment features
+    if (typeof Office !== 'undefined' && Office.context && Office.context.requirements) {
+        supportsComments = Office.context.requirements.isSetSupported('WordApi', '1.4');
+    }
+
+    if (!supportsComments) {
+        // Hide comment-related UI elements (graceful degradation)
+        const commentTab = document.getElementById('tab-comment');
+        const commentPanel = document.getElementById('panel-comment');
+        const commentStatusBar = document.getElementById('commentStatusBar');
+        if (commentTab) commentTab.style.display = 'none';
+        if (commentPanel) commentPanel.style.display = 'none';
+        if (commentStatusBar) commentStatusBar.style.display = 'none';
+        addLog('Comment features unavailable (requires Word API 1.4)', 'info');
+    }
 
     // Restore unsaved text from active prompts on load
     for (const category of CATEGORIES) {
@@ -539,6 +556,31 @@ function capitalize(str) {
 }
 
 // ============================================================================
+// COMMENT STATUS BAR
+// ============================================================================
+
+/**
+ * Updates the comment status bar visibility and pending count text.
+ * Called by the integration plan (03-03) whenever the pending count changes.
+ *
+ * @param {number} count - Number of comments currently pending
+ */
+function updateCommentStatusBar(count) {
+    const bar = document.getElementById('commentStatusBar');
+    if (!bar) return;
+
+    if (count === 0) {
+        bar.style.display = 'none';
+    } else {
+        bar.style.display = 'flex';
+        const text = document.getElementById('commentStatusText');
+        if (text) {
+            text.textContent = `${count} comment${count !== 1 ? 's' : ''} pending...`;
+        }
+    }
+}
+
+// ============================================================================
 // CONNECTION & MODEL MANAGEMENT
 // ============================================================================
 
@@ -761,6 +803,50 @@ function addLog(message, type = "info") {
 
     entry.className = `log-${type}`;
     entry.textContent = `[${timestamp}] ${message}`;
+
+    logsDiv.appendChild(entry);
+    logsDiv.scrollTop = logsDiv.scrollHeight;
+
+    console.log(`[${type.toUpperCase()}] ${message}`);
+
+    // Send to server log (best effort)
+    fetch('/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, type, timestamp: new Date().toISOString() })
+    }).catch(() => { });
+}
+
+/**
+ * Extended version of addLog that appends a clickable "Retry" link to the log entry.
+ * Used for failed comment requests where the user can retry the operation.
+ *
+ * @param {string} message - The log message text
+ * @param {string} type - Log type: "info", "success", "warning", "error"
+ * @param {Function} retryCallback - Function to call when Retry is clicked
+ */
+function addLogWithRetry(message, type, retryCallback) {
+    const logsDiv = document.getElementById("logs");
+    const entry = document.createElement("div");
+    const timestamp = new Date().toLocaleTimeString();
+    entry.className = `log-${type}`;
+
+    const msgSpan = document.createElement("span");
+    msgSpan.textContent = `[${timestamp}] ${message} `;
+    entry.appendChild(msgSpan);
+
+    if (retryCallback) {
+        const retryLink = document.createElement("a");
+        retryLink.textContent = "Retry";
+        retryLink.href = "#";
+        retryLink.className = "retry-link";
+        retryLink.onclick = (e) => {
+            e.preventDefault();
+            retryCallback();
+            entry.remove();  // Remove the error log entry on retry
+        };
+        entry.appendChild(retryLink);
+    }
 
     logsDiv.appendChild(entry);
     logsDiv.scrollTop = logsDiv.scrollHeight;
