@@ -28,11 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. LLM responses never contain `<think>` tags or reasoning artifacts in tracked changes, regardless of which backend or model is used
   4. User's backend selection and configuration persists across add-in reloads
   5. Existing Ollama workflow continues to work identically after the refactor (no regressions)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md — TDD: Build unified llm-client.js module + webpack vLLM proxy
+- [ ] 01-02-PLAN.md — Wire LLM client into UI with backend selector and config migration
 
 ### Phase 2: Three-Category Prompt System
 **Goal**: Users manage three independent prompt libraries (Context, Amendment, Comment) with clear activation rules, replacing the single-prompt model
@@ -74,6 +74,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. LLM Client + vLLM Backend | 0/? | Not started | - |
+| 1. LLM Client + vLLM Backend | 0/2 | Planning complete | - |
 | 2. Three-Category Prompt System | 0/? | Not started | - |
 | 3. Async Comment Queue | 0/? | Not started | - |
