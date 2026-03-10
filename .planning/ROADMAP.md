@@ -44,11 +44,12 @@ Plans:
   3. When an Overall Context prompt is active, its text is automatically prepended as system-level context to every LLM request without the user needing to repeat it in each task prompt
   4. Existing saved prompts are automatically migrated to the Amendment category on first load, preserving all user data
   5. All prompt libraries persist across add-in reloads via localStorage
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — PromptManager module with state model, CRUD, activation, validation, persistence, and test scaffolds
+- [ ] 02-02-PLAN.md — Three-tab UI with status summary, dynamic Review button, and PromptManager wiring
+- [ ] 02-03-PLAN.md — Prompt composition (composeMessages) and review workflow integration
 
 ### Phase 3: Async Comment Queue
 **Goal**: Users can fire comment requests and continue working while the LLM processes, with comments silently appearing on the correct text when responses arrive
@@ -75,5 +76,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. LLM Client + vLLM Backend | 0/2 | Planning complete | - |
-| 2. Three-Category Prompt System | 0/? | Not started | - |
+| 2. Three-Category Prompt System | 0/3 | Planning complete | - |
 | 3. Async Comment Queue | 0/? | Not started | - |
