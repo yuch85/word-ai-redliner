@@ -581,3 +581,122 @@ section {
         transform: rotate(360deg);
     }
 }
+
+/* Tab Bar */
+.prompt-tabs {
+    display: flex;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: var(--spacing-md);
+    gap: 0;
+}
+
+.prompt-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-xs);
+    border: none;
+    background: transparent;
+    color: var(--secondary-text);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    font-family: var(--font-family);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.prompt-tab:hover {
+    color: var(--primary-text);
+}
+
+.prompt-tab.active {
+    color: var(--primary-text);
+    border-bottom-color: var(--accent-color);
+    font-weight: 600;
+}
+
+.prompt-tab:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: -2px;
+}
+
+/* Tab Dot Indicators */
+.tab-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--error-color);
+}
+
+.tab-dot.active {
+    background-color: var(--success-color);
+}
+
+/* Status Summary */
+.prompt-status-summary {
+    background-color: var(--secondary-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-sm);
+}
+
+.status-line {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: 3px 0;
+    cursor: pointer;
+    border-radius: 4px;
+    padding-left: var(--spacing-xs);
+    transition: background-color 0.15s;
+}
+
+.status-line:hover {
+    background-color: var(--tertiary-bg);
+}
+
+.status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid var(--secondary-text);
+    background-color: transparent;
+    flex-shrink: 0;
+}
+
+.status-dot.active {
+    background-color: var(--success-color);
+    border-color: var(--success-color);
+}
+
+.status-label {
+    color: var(--secondary-text);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.status-value {
+    color: var(--primary-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.status-dot:not(.active) + .status-label + .status-value {
+    color: var(--secondary-text);
+}
+
+/* Modal Category Label */
+.modal-category-label {
+    font-size: var(--font-size-sm);
+    color: var(--secondary-text);
+    margin-bottom: var(--spacing-md);
+}
