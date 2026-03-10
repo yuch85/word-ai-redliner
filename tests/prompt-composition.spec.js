@@ -1,9 +1,6 @@
 /**
  * Unit tests for prompt composition (message assembly for chat completions).
  * Covers requirements: PRMT-07, PRMT-08, PRMT-09
- *
- * Most tests are stubs (test.todo) for Plan 03's composition work.
- * One real test validates the PromptManager import chain.
  */
 import { PromptManager, CATEGORIES } from '../src/lib/prompt-manager.js';
 
@@ -37,35 +34,121 @@ describe('PromptManager import', () => {
 });
 
 // ============================================================================
-// PRMT-07: Context prompt as system message (Plan 03)
+// PRMT-07: Context prompt as system message
 // ============================================================================
 
 describe('system message', () => {
-    test.todo('when context prompt is active, composeMessages() returns it as {role: "system", content: contextTemplate}');
+    test('when context prompt is active, composeMessages() returns it as {role: "system", content: contextTemplate}', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('context', { name: 'Legal Context', template: 'You are a legal reviewer', description: 'Legal' });
+        pm.selectPrompt('context', 'legal-context');
+        pm.addPrompt('amendment', { name: 'Review', template: '{selection}', description: 'Review' });
+        pm.selectPrompt('amendment', 'review');
 
-    test.todo('when no context prompt is active, messages array has no system message');
+        const messages = pm.composeMessages('contract text', 'amendment');
+
+        expect(messages).toHaveLength(2);
+        expect(messages[0]).toEqual({ role: 'system', content: 'You are a legal reviewer' });
+        expect(messages[1]).toEqual({ role: 'user', content: 'contract text' });
+    });
+
+    test('when no context prompt is active, messages array has no system message', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Review', template: '{selection}', description: 'Review' });
+        pm.selectPrompt('amendment', 'review');
+
+        const messages = pm.composeMessages('some text', 'amendment');
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0]).toEqual({ role: 'user', content: 'some text' });
+    });
 });
 
 // ============================================================================
-// PRMT-08: Amendment prompt uses {selection} placeholder (Plan 03)
+// PRMT-08: Amendment prompt uses {selection} placeholder
 // ============================================================================
 
 describe('amendment selection', () => {
-    test.todo('amendment prompt has {selection} replaced with actual text in user message');
+    test('amendment prompt has {selection} replaced with actual text in user message', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Amend', template: 'Review this: {selection}', description: 'Amend' });
+        pm.selectPrompt('amendment', 'amend');
+
+        const messages = pm.composeMessages('hello world', 'amendment');
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0]).toEqual({ role: 'user', content: 'Review this: hello world' });
+    });
 });
 
 // ============================================================================
-// PRMT-09: Comment prompt uses {selection} placeholder (Plan 03)
+// PRMT-09: Comment prompt uses {selection} placeholder
 // ============================================================================
 
 describe('comment selection', () => {
-    test.todo('comment prompt has {selection} replaced with actual text in user message');
+    test('comment prompt has {selection} replaced with actual text in user message', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('comment', { name: 'Analyze', template: 'Analyze: {selection}', description: 'Analyze' });
+        pm.selectPrompt('comment', 'analyze');
+
+        const messages = pm.composeMessages('some text', 'comment');
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0]).toEqual({ role: 'user', content: 'Analyze: some text' });
+    });
 });
 
 // ============================================================================
-// Combined scenarios (Plan 03)
+// Edge cases
 // ============================================================================
 
-describe('both amendment and comment', () => {
-    test.todo('when both active, composeMessages returns messages for amendment (comment handled separately in Phase 3)');
+describe('edge cases', () => {
+    test('multiple {selection} occurrences are all replaced', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Multi', template: 'First: {selection}, Second: {selection}', description: 'Multi' });
+        pm.selectPrompt('amendment', 'multi');
+
+        const messages = pm.composeMessages('test', 'amendment');
+
+        expect(messages[0]).toEqual({ role: 'user', content: 'First: test, Second: test' });
+    });
+
+    test('no active prompt for target category returns empty array', () => {
+        const pm = new PromptManager();
+
+        const messages = pm.composeMessages('text', 'amendment');
+
+        expect(messages).toEqual([]);
+    });
+
+    test('context prompt is static -- {selection} in context template is NOT replaced', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('context', { name: 'Ctx', template: 'Context with {selection} token', description: 'Ctx' });
+        pm.selectPrompt('context', 'ctx');
+        pm.addPrompt('amendment', { name: 'Amend', template: '{selection}', description: 'Amend' });
+        pm.selectPrompt('amendment', 'amend');
+
+        const messages = pm.composeMessages('replaced text', 'amendment');
+
+        expect(messages[0]).toEqual({ role: 'system', content: 'Context with {selection} token' });
+        expect(messages[1]).toEqual({ role: 'user', content: 'replaced text' });
+    });
+
+    test('composeMessages always returns array of {role, content} objects', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('context', { name: 'Ctx', template: 'System prompt', description: '' });
+        pm.selectPrompt('context', 'ctx');
+        pm.addPrompt('comment', { name: 'Cmt', template: 'Comment on {selection}', description: '' });
+        pm.selectPrompt('comment', 'cmt');
+
+        const messages = pm.composeMessages('text', 'comment');
+
+        expect(Array.isArray(messages)).toBe(true);
+        messages.forEach(msg => {
+            expect(msg).toHaveProperty('role');
+            expect(msg).toHaveProperty('content');
+            expect(typeof msg.role).toBe('string');
+            expect(typeof msg.content).toBe('string');
+        });
+    });
 });
