@@ -42,7 +42,7 @@ Plans:
   1. User sees three distinct prompt categories (Overall Context, Amendment, Comment) in the task pane, each with its own library of named prompts that can be created, edited, and deleted independently
   2. User can activate at most one prompt per category, and the UI enforces that at least one of Amendment or Comment must be active before allowing submission
   3. When an Overall Context prompt is active, its text is automatically prepended as system-level context to every LLM request without the user needing to repeat it in each task prompt
-  4. Existing saved prompts are automatically migrated to the Amendment category on first load, preserving all user data
+  4. Prompt system starts fresh with no migration from legacy single-prompt storage (user decision — clean slate preferred over auto-migration)
   5. All prompt libraries persist across add-in reloads via localStorage
 **Plans**: 3 plans
 

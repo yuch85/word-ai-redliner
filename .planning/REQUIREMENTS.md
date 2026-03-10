@@ -28,7 +28,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **PRMT-07**: Active Context prompt composed as system message in chat completions request
 - [x] **PRMT-08**: Amendment prompt uses `{selection}` placeholder (existing behavior)
 - [x] **PRMT-09**: Comment prompt uses `{selection}` placeholder
-- [x] **PRMT-10**: Existing prompts automatically migrated to Amendment category on first load
+- [x] **PRMT-10**: Prompt system starts fresh (no migration from legacy single-prompt storage); user decision overrides original auto-migration plan
 - [x] **PRMT-11**: Prompt libraries persist in localStorage with same server-sync fallback pattern
 
 ### Comment Insertion
