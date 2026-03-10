@@ -48,7 +48,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — PromptManager module with state model, CRUD, activation, validation, persistence, and test scaffolds
-- [ ] 02-02-PLAN.md — Three-tab UI with status summary, dynamic Review button, and PromptManager wiring
+- [x] 02-02-PLAN.md — Three-tab UI with status summary, dynamic Review button, and PromptManager wiring
 - [ ] 02-03-PLAN.md — Prompt composition (composeMessages) and review workflow integration
 
 ### Phase 3: Async Comment Queue
@@ -77,5 +77,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. LLM Client + vLLM Backend | 2/2 | Complete   | 2026-03-10 |
-| 2. Three-Category Prompt System | 1/3 | In Progress | - |
+| 2. Three-Category Prompt System | 2/3 | In Progress|  |
 | 3. Async Comment Queue | 0/3 | Planning complete | - |
