@@ -75,6 +75,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. LLM Client + vLLM Backend | 0/2 | Planning complete | - |
+| 1. LLM Client + vLLM Backend | 1/2 | In Progress | - |
 | 2. Three-Category Prompt System | 0/3 | Planning complete | - |
 | 3. Async Comment Queue | 0/? | Not started | - |

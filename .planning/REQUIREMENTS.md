@@ -10,10 +10,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### LLM Backend
 
 - [ ] **LLM-01**: User can select vLLM as an LLM backend with configurable endpoint URL
-- [ ] **LLM-02**: vLLM requests use OpenAI-compatible `/v1/chat/completions` format
-- [ ] **LLM-03**: Unified LLM client abstraction serves both Ollama and vLLM backends
-- [ ] **LLM-04**: Webpack proxy route for vLLM (`/vllm` → configurable target, default `localhost:8026`)
-- [ ] **LLM-05**: `<think>` tags stripped from all LLM responses via multi-pass regex (handles empty tags, orphaned closing tags)
+- [x] **LLM-02**: vLLM requests use OpenAI-compatible `/v1/chat/completions` format
+- [x] **LLM-03**: Unified LLM client abstraction serves both Ollama and vLLM backends
+- [x] **LLM-04**: Webpack proxy route for vLLM (`/vllm` → configurable target, default `localhost:8026`)
+- [x] **LLM-05**: `<think>` tags stripped from all LLM responses via multi-pass regex (handles empty tags, orphaned closing tags)
 - [ ] **LLM-06**: User can test connection and list available models for both Ollama and vLLM backends
 - [ ] **LLM-07**: Backend selection persisted in settings (localStorage)
 
@@ -85,10 +85,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | LLM-01 | Phase 1 | Pending |
-| LLM-02 | Phase 1 | Pending |
-| LLM-03 | Phase 1 | Pending |
-| LLM-04 | Phase 1 | Pending |
-| LLM-05 | Phase 1 | Pending |
+| LLM-02 | Phase 1 | Complete |
+| LLM-03 | Phase 1 | Complete |
+| LLM-04 | Phase 1 | Complete |
+| LLM-05 | Phase 1 | Complete |
 | LLM-06 | Phase 1 | Pending |
 | LLM-07 | Phase 1 | Pending |
 | PRMT-01 | Phase 2 | Pending |
