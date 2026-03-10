@@ -12,7 +12,7 @@ This milestone adds three major capabilities to the Word AI Redliner add-in: vLL
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: LLM Client + vLLM Backend** - Extract LLM logic into unified client, add vLLM support, strip think tags
+- [x] **Phase 1: LLM Client + vLLM Backend** - Extract LLM logic into unified client, add vLLM support, strip think tags (completed 2026-03-10)
 - [ ] **Phase 2: Three-Category Prompt System** - Split prompts into Context/Amendment/Comment categories with activation rules
 - [ ] **Phase 3: Async Comment Queue** - Fire-and-forget comment insertion with bookmark-based range persistence
 
@@ -31,8 +31,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — TDD: Build unified llm-client.js module + webpack vLLM proxy
-- [ ] 01-02-PLAN.md — Wire LLM client into UI with backend selector and config migration
+- [x] 01-01-PLAN.md — TDD: Build unified llm-client.js module + webpack vLLM proxy
+- [x] 01-02-PLAN.md — Wire LLM client into UI with backend selector and config migration
 
 ### Phase 2: Three-Category Prompt System
 **Goal**: Users manage three independent prompt libraries (Context, Amendment, Comment) with clear activation rules, replacing the single-prompt model
@@ -47,7 +47,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — PromptManager module with state model, CRUD, activation, validation, persistence, and test scaffolds
+- [x] 02-01-PLAN.md — PromptManager module with state model, CRUD, activation, validation, persistence, and test scaffolds
 - [ ] 02-02-PLAN.md — Three-tab UI with status summary, dynamic Review button, and PromptManager wiring
 - [ ] 02-03-PLAN.md — Prompt composition (composeMessages) and review workflow integration
 
@@ -76,6 +76,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. LLM Client + vLLM Backend | 1/2 | In Progress | - |
-| 2. Three-Category Prompt System | 0/3 | Planning complete | - |
+| 1. LLM Client + vLLM Backend | 2/2 | Complete   | 2026-03-10 |
+| 2. Three-Category Prompt System | 1/3 | In Progress | - |
 | 3. Async Comment Queue | 0/3 | Planning complete | - |
