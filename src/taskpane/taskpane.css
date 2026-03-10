@@ -700,3 +700,40 @@ section {
     color: var(--secondary-text);
     margin-bottom: var(--spacing-md);
 }
+
+/* Comment Status Bar */
+.comment-status-bar {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    margin: 4px 0;
+    font-size: 13px;
+    color: #666;
+    background: #f5f5f5;
+    border-radius: 4px;
+    border-left: 3px solid #0078d4;
+}
+
+.comment-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #ddd;
+    border-top-color: #0078d4;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+/* Retry Link (activity log) */
+.retry-link {
+    color: #0078d4;
+    cursor: pointer;
+    text-decoration: underline;
+    margin-left: 6px;
+    font-weight: 500;
+}
+
+.retry-link:hover {
+    color: #005a9e;
+}
