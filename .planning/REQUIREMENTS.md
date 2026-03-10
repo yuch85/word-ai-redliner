@@ -25,7 +25,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **PRMT-04**: Maximum one active prompt per category (three total max active)
 - [x] **PRMT-05**: Overall Context prompt is optional (can be deactivated)
 - [x] **PRMT-06**: At least one of Amendment or Comment prompt must be active
-- [ ] **PRMT-07**: Active Context prompt composed as system message in chat completions request
+- [x] **PRMT-07**: Active Context prompt composed as system message in chat completions request
 - [x] **PRMT-08**: Amendment prompt uses `{selection}` placeholder (existing behavior)
 - [x] **PRMT-09**: Comment prompt uses `{selection}` placeholder
 - [x] **PRMT-10**: Existing prompts automatically migrated to Amendment category on first load
@@ -97,7 +97,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PRMT-04 | Phase 2 | Complete |
 | PRMT-05 | Phase 2 | Complete |
 | PRMT-06 | Phase 2 | Complete |
-| PRMT-07 | Phase 2 | Pending |
+| PRMT-07 | Phase 2 | Complete |
 | PRMT-08 | Phase 2 | Complete |
 | PRMT-09 | Phase 2 | Complete |
 | PRMT-10 | Phase 2 | Complete |
