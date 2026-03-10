@@ -1,0 +1,79 @@
+# Roadmap: Word AI Redliner
+
+## Overview
+
+This milestone adds three major capabilities to the Word AI Redliner add-in: vLLM as a second LLM backend alongside Ollama, a three-category prompt system (Context/Amendment/Comment) replacing the current single-prompt model, and async comment insertion that lets users continue working while the LLM processes analytical requests. The phases follow a strict dependency chain -- the unified LLM client enables the prompt system's chat completions composition, and the prompt system enables the comment queue's prompt assembly.
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+- [ ] **Phase 1: LLM Client + vLLM Backend** - Extract LLM logic into unified client, add vLLM support, strip think tags
+- [ ] **Phase 2: Three-Category Prompt System** - Split prompts into Context/Amendment/Comment categories with activation rules
+- [ ] **Phase 3: Async Comment Queue** - Fire-and-forget comment insertion with bookmark-based range persistence
+
+## Phase Details
+
+### Phase 1: LLM Client + vLLM Backend
+**Goal**: Users can send selected text to either Ollama or vLLM for review, with clean LLM responses free of reasoning artifacts
+**Depends on**: Nothing (first phase)
+**Requirements**: LLM-01, LLM-02, LLM-03, LLM-04, LLM-05, LLM-06, LLM-07
+**Success Criteria** (what must be TRUE):
+  1. User can select vLLM from settings, configure its endpoint URL, and use it to review selected text with tracked changes applied identically to the existing Ollama workflow
+  2. User can test connection and browse available models for both Ollama and vLLM backends from the settings panel
+  3. LLM responses never contain `<think>` tags or reasoning artifacts in tracked changes, regardless of which backend or model is used
+  4. User's backend selection and configuration persists across add-in reloads
+  5. Existing Ollama workflow continues to work identically after the refactor (no regressions)
+**Plans**: TBD
+
+Plans:
+- [ ] 01-01: TBD
+- [ ] 01-02: TBD
+
+### Phase 2: Three-Category Prompt System
+**Goal**: Users manage three independent prompt libraries (Context, Amendment, Comment) with clear activation rules, replacing the single-prompt model
+**Depends on**: Phase 1
+**Requirements**: PRMT-01, PRMT-02, PRMT-03, PRMT-04, PRMT-05, PRMT-06, PRMT-07, PRMT-08, PRMT-09, PRMT-10, PRMT-11
+**Success Criteria** (what must be TRUE):
+  1. User sees three distinct prompt categories (Overall Context, Amendment, Comment) in the task pane, each with its own library of named prompts that can be created, edited, and deleted independently
+  2. User can activate at most one prompt per category, and the UI enforces that at least one of Amendment or Comment must be active before allowing submission
+  3. When an Overall Context prompt is active, its text is automatically prepended as system-level context to every LLM request without the user needing to repeat it in each task prompt
+  4. Existing saved prompts are automatically migrated to the Amendment category on first load, preserving all user data
+  5. All prompt libraries persist across add-in reloads via localStorage
+**Plans**: TBD
+
+Plans:
+- [ ] 02-01: TBD
+- [ ] 02-02: TBD
+
+### Phase 3: Async Comment Queue
+**Goal**: Users can fire comment requests and continue working while the LLM processes, with comments silently appearing on the correct text when responses arrive
+**Depends on**: Phase 1, Phase 2
+**Requirements**: CMNT-01, CMNT-02, CMNT-03, CMNT-04, CMNT-05, CMNT-06, CMNT-07, CMNT-08, CMNT-09, CMNT-10, CMNT-11
+**Success Criteria** (what must be TRUE):
+  1. User can select text, submit a comment prompt, immediately select different text and submit again -- without waiting for the first response
+  2. Each comment appears as a Word comment attached to the exact text that was selected when the request was made, even though the user has since moved the cursor elsewhere
+  3. UI displays a count of in-flight comment requests that updates in real time as requests complete
+  4. When both Amendment and Comment prompts are active, selecting text and submitting applies tracked changes first then fires the comment request asynchronously
+  5. Comment features are gracefully hidden on Word versions that lack WordApi 1.4 support, with no errors or broken UI
+
+**Plans**: TBD
+
+Plans:
+- [ ] 03-01: TBD
+- [ ] 03-02: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. LLM Client + vLLM Backend | 0/? | Not started | - |
+| 2. Three-Category Prompt System | 0/? | Not started | - |
+| 3. Async Comment Queue | 0/? | Not started | - |

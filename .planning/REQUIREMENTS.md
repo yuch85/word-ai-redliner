@@ -84,41 +84,41 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LLM-01 | — | Pending |
-| LLM-02 | — | Pending |
-| LLM-03 | — | Pending |
-| LLM-04 | — | Pending |
-| LLM-05 | — | Pending |
-| LLM-06 | — | Pending |
-| LLM-07 | — | Pending |
-| PRMT-01 | — | Pending |
-| PRMT-02 | — | Pending |
-| PRMT-03 | — | Pending |
-| PRMT-04 | — | Pending |
-| PRMT-05 | — | Pending |
-| PRMT-06 | — | Pending |
-| PRMT-07 | — | Pending |
-| PRMT-08 | — | Pending |
-| PRMT-09 | — | Pending |
-| PRMT-10 | — | Pending |
-| PRMT-11 | — | Pending |
-| CMNT-01 | — | Pending |
-| CMNT-02 | — | Pending |
-| CMNT-03 | — | Pending |
-| CMNT-04 | — | Pending |
-| CMNT-05 | — | Pending |
-| CMNT-06 | — | Pending |
-| CMNT-07 | — | Pending |
-| CMNT-08 | — | Pending |
-| CMNT-09 | — | Pending |
-| CMNT-10 | — | Pending |
-| CMNT-11 | — | Pending |
+| LLM-01 | Phase 1 | Pending |
+| LLM-02 | Phase 1 | Pending |
+| LLM-03 | Phase 1 | Pending |
+| LLM-04 | Phase 1 | Pending |
+| LLM-05 | Phase 1 | Pending |
+| LLM-06 | Phase 1 | Pending |
+| LLM-07 | Phase 1 | Pending |
+| PRMT-01 | Phase 2 | Pending |
+| PRMT-02 | Phase 2 | Pending |
+| PRMT-03 | Phase 2 | Pending |
+| PRMT-04 | Phase 2 | Pending |
+| PRMT-05 | Phase 2 | Pending |
+| PRMT-06 | Phase 2 | Pending |
+| PRMT-07 | Phase 2 | Pending |
+| PRMT-08 | Phase 2 | Pending |
+| PRMT-09 | Phase 2 | Pending |
+| PRMT-10 | Phase 2 | Pending |
+| PRMT-11 | Phase 2 | Pending |
+| CMNT-01 | Phase 3 | Pending |
+| CMNT-02 | Phase 3 | Pending |
+| CMNT-03 | Phase 3 | Pending |
+| CMNT-04 | Phase 3 | Pending |
+| CMNT-05 | Phase 3 | Pending |
+| CMNT-06 | Phase 3 | Pending |
+| CMNT-07 | Phase 3 | Pending |
+| CMNT-08 | Phase 3 | Pending |
+| CMNT-09 | Phase 3 | Pending |
+| CMNT-10 | Phase 3 | Pending |
+| CMNT-11 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 29 total
-- Mapped to phases: 0
-- Unmapped: 29
+- Mapped to phases: 29
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 after initial definition*
+*Last updated: 2026-03-10 after roadmap creation*
