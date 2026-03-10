@@ -28,3 +28,6 @@ Thumbs.db
 
 # IDE
 *.code-workspace
+
+# Word API reference docs
+word_api_docs/
