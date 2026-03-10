@@ -8,7 +8,7 @@ import { PromptManager, CATEGORIES } from '../src/lib/prompt-manager.js';
 const localStorageMock = (() => {
     let store = {};
     return {
-        getItem: (key) => store[key] || null,
+        getItem: (key) => (key in store ? store[key] : null),
         setItem: (key, value) => { store[key] = String(value); },
         removeItem: (key) => { delete store[key]; },
         clear: () => { store = {}; }
