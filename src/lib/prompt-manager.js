@@ -246,6 +246,40 @@ export class PromptManager {
     }
 
     /**
+     * Composes a messages array for chat completions from active prompts.
+     *
+     * If a Context prompt is active, it becomes the system message (used as-is,
+     * no {selection} replacement -- context is static).
+     * The target category (amendment or comment) prompt becomes the user message
+     * with all {selection} occurrences replaced by selectionText.
+     *
+     * Returns an empty array if the target category has no active prompt.
+     * Does not throw -- callers should check canSubmit() before calling.
+     *
+     * @param {string} selectionText - The user's selected text from the document
+     * @param {string} category - Target category: 'amendment' or 'comment'
+     * @returns {Array<{role: string, content: string}>} Messages array for chat completions
+     */
+    composeMessages(selectionText, category) {
+        const messages = [];
+
+        // System message from context (if active) -- PRMT-07
+        const contextPrompt = this.getActivePrompt('context');
+        if (contextPrompt) {
+            messages.push({ role: 'system', content: contextPrompt.template });
+        }
+
+        // User message from target category (amendment or comment) -- PRMT-08, PRMT-09
+        const targetPrompt = this.getActivePrompt(category);
+        if (targetPrompt) {
+            const content = targetPrompt.template.replace(/{selection}/g, selectionText);
+            messages.push({ role: 'user', content: content });
+        }
+
+        return messages;
+    }
+
+    /**
      * Returns the full state object (for UI consumers).
      *
      * @returns {object} State with context, amendment, comment sub-objects
