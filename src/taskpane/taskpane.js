@@ -634,23 +634,13 @@ async function handleReviewSelection() {
         return;
     }
 
-    // Check if submission is allowed (amendment or comment must be active)
     if (!promptManager.canSubmit()) {
-        addLog("No amendment or comment prompt is active", "warning");
-        return;
-    }
-
-    // Get the active amendment prompt template for the current review flow.
-    // Plan 03 will replace this with full composition (context + amendment + comment).
-    const activeAmendment = promptManager.getActivePrompt('amendment');
-    const promptText = activeAmendment ? activeAmendment.template : '';
-
-    if (!promptText) {
-        addLog("No active amendment prompt template found", "warning");
+        addLog("Please select an Amendment or Comment prompt", "warning");
         return;
     }
 
     const btn = document.getElementById("reviewBtn");
+    const activeMode = promptManager.getActiveMode();
 
     try {
         isProcessing = true;
@@ -663,7 +653,6 @@ async function handleReviewSelection() {
             const selection = context.document.getSelection();
             selection.load("text");
             await context.sync();
-
             if (!selection.text || !selection.text.trim()) {
                 throw new Error("Please select some text first.");
             }
@@ -672,44 +661,68 @@ async function handleReviewSelection() {
 
         addLog(`Processing selection (${selectionText.length} chars)...`, "info");
 
-        // 2. Call LLM via unified client
-        const backendConfig = getActiveBackendConfig();
-        const fullPrompt = promptText.replace(/{selection}/g, selectionText);
-        const response = await sendPrompt(backendConfig, fullPrompt, addLog);
+        // 2. Compose and send prompt
+        // Amendment execution (existing workflow)
+        if (activeMode === 'amendment' || activeMode === 'both') {
+            const messages = promptManager.composeMessages(selectionText, 'amendment');
 
-        addLog("LLM Response received", "success");
-        addLog(`Response: ${response.substring(0, 100)}${response.length > 100 ? '...' : ''}`, "info");
-
-        // 3. Apply Diff Logic
-        addLog("Applying changes...", "info");
-
-        await Word.run(async (context) => {
-            // Re-get the selection to ensure we have a valid range
-            const selection = context.document.getSelection();
-
-            // Ensure Track Changes state matches config
-            if (Word.ChangeTrackingMode) {
-                context.document.changeTrackingMode = config.trackChangesEnabled
-                    ? Word.ChangeTrackingMode.trackAll
-                    : Word.ChangeTrackingMode.off;
-            }
-
-            if (config.lineDiffEnabled) {
-                await applySentenceDiffStrategy(context, selection, selectionText, response, addLog);
+            // Flatten messages into a single prompt for current sendPromptToLLM.
+            // Phase 1's unified client will accept messages[] directly.
+            // For now: system message (if any) prepended as context, user message is the prompt.
+            let fullPrompt;
+            if (messages.length === 2) {
+                // System + user message
+                fullPrompt = messages[0].content + '\n\n' + messages[1].content;
+            } else if (messages.length === 1) {
+                fullPrompt = messages[0].content;
             } else {
-                await applyTokenMapStrategy(context, selection, selectionText, response, addLog);
+                throw new Error("No prompt composed -- check active prompts");
             }
-        });
 
-        addLog("Changes applied successfully", "success");
+            const backendConfig = getActiveBackendConfig();
+            const response = await sendPrompt(backendConfig, fullPrompt, addLog);
+
+            addLog("LLM Response received", "success");
+            addLog(`Response: ${response.substring(0, 100)}${response.length > 100 ? '...' : ''}`, "info");
+
+            // 3. Apply Diff Logic
+            addLog("Applying changes...", "info");
+
+            await Word.run(async (context) => {
+                const selection = context.document.getSelection();
+                if (Word.ChangeTrackingMode) {
+                    context.document.changeTrackingMode = config.trackChangesEnabled
+                        ? Word.ChangeTrackingMode.trackAll
+                        : Word.ChangeTrackingMode.off;
+                }
+                if (config.lineDiffEnabled) {
+                    await applySentenceDiffStrategy(context, selection, selectionText, response, addLog);
+                } else {
+                    await applyTokenMapStrategy(context, selection, selectionText, response, addLog);
+                }
+            });
+
+            addLog("Changes applied successfully", "success");
+        }
+
+        // Comment execution -- Phase 3 will implement async comment queue.
+        // For now, log that comment is active but not yet implemented.
+        if (activeMode === 'comment' || activeMode === 'both') {
+            if (activeMode === 'comment') {
+                // Comment-only mode -- Phase 3 will handle this
+                addLog("Comment prompt is active. Comment insertion will be available in a future update.", "info");
+            } else {
+                // Both mode -- amendment already executed above; comment deferred to Phase 3
+                addLog("Amendment applied. Comment insertion will follow in a future update.", "info");
+            }
+        }
 
     } catch (error) {
         addLog(`Error: ${error.message}`, "error");
     } finally {
         isProcessing = false;
         btn.classList.remove("loading");
-        btn.disabled = false;
-        updateReviewButton(); // Restore correct disabled state
+        updateReviewButton();
     }
 }
 
