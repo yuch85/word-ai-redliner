@@ -22,7 +22,7 @@
  * @param {function} [log] - Optional logging callback (message, type)
  * @returns {string} Cleaned text with reasoning artifacts removed
  */
-function stripThinkTags(text, log) {
+export function stripThinkTags(text, log) {
   if (!text) return text;
 
   let cleaned = text;
@@ -66,7 +66,7 @@ function stripThinkTags(text, log) {
  * @returns {Promise<string>} The LLM response text with think tags stripped
  * @throws {Error} On non-ok HTTP response or network failure
  */
-async function sendPrompt(config, promptText, log) {
+export async function sendPrompt(config, promptText, log) {
   const url = config.url.replace(/\/+$/, '') + '/v1/chat/completions';
 
   const headers = { 'Content-Type': 'application/json' };
@@ -113,7 +113,7 @@ async function sendPrompt(config, promptText, log) {
  * @returns {Promise<{connected: boolean, models: Array<{id: string}>}>}
  * @throws {Error} On non-ok HTTP response or network failure
  */
-async function testConnection(config) {
+export async function testConnection(config) {
   const url = config.url.replace(/\/+$/, '') + '/v1/models';
 
   const headers = { Accept: 'application/json' };
@@ -132,4 +132,3 @@ async function testConnection(config) {
   return { connected: true, models };
 }
 
-module.exports = { stripThinkTags, sendPrompt, testConnection };
