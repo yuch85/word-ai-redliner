@@ -8,6 +8,27 @@
 
 Fire-and-forget comment insertion: user selects text, submits a comment prompt, and continues working while the LLM processes. Comments silently appear as Word comments on the correct text when responses arrive, using bookmark-based range persistence. Depends on Phase 1 (unified LLM client) and Phase 2 (three-category prompt system with Comment category).
 
+### Dependency Boundary (Phase 1 + Phase 2 concurrency)
+
+**Planner/researcher: identify which Phase 3 work can proceed independently of Phases 1 and 2, and which requires them to land first.** Phase 2 used a similar split (~80% independent / ~20% dependent) that enabled concurrent execution. Phase 3 likely has a similar boundary:
+
+**Likely independent of Phases 1 & 2:**
+- Bookmark-based range capture and persistence mechanics
+- Status bar UI (pending count, show/hide, spinner)
+- Queue state management (pending array, count tracking)
+- `insertComment()` via Word API (can be tested with hardcoded text)
+- WordApi 1.4 runtime detection and graceful degradation
+- Prototype spike for bookmark persistence under edits (CMNT-11)
+- Failure handling (retry links, lost range fallback, error logging)
+
+**Likely requires Phases 1 & 2:**
+- Wiring comment requests through the unified LLM client (Phase 1)
+- Composing Comment prompt + Context prompt into chat completions request (Phase 2)
+- Dual-action flow: amendment first, then async comment (Phase 2 button logic + Phase 1 client)
+- Integration with Phase 2's Review button states and prompt activation rules
+
+**Planning note:** Plans can split along this boundary. Independent plans execute immediately; integration plan executes after Phases 1 and 2 land.
+
 </domain>
 
 <decisions>
