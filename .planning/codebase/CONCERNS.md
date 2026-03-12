@@ -16,11 +16,11 @@
 - Impact: No automated verification of core logic, especially diff strategies and Word API interactions. Regression risk is high.
 - Fix approach: Implement unit tests for `src/lib/structure-model.js`, mock Word API tests for diff strategies, and integration tests for end-to-end flows.
 
-**Abandoned Library Extraction:**
-- Issue: ARCHITECTURE.md documents that `office-word-diff` is planned as a standalone library, but it's currently a GitHub dependency in `package.json` pointing to an external repo with no local source. The separation is incomplete.
-- Files: `package.json` (line 27), `src/lib/`, `src/scripts/`
-- Impact: Dual maintenance burden; unclear which code should be in the add-in vs. the library. Version mismatches risk breaking functionality.
-- Fix approach: Either fully extract the library into a separate repo with clear versioning, or move library code back into this project and remove the external dependency.
+**External Library Versioning:**
+- Note: `office-word-diff` is a separate library by the same author, hosted at `github:yuch85/office-word-diff`. The extraction is intentional and complete — the library is consumed as a GitHub dependency.
+- Files: `package.json` (line 27)
+- Impact: Minor — no pinned version/tag means `npm install` may pull different commits. Version mismatches could break functionality silently.
+- Fix approach: Pin to a specific release tag or commit hash in `package.json` (e.g., `github:yuch85/office-word-diff#v1.0.0`).
 
 **Unstructured Diff Strategy Fallback:**
 - Issue: Token map strategy in `src/scripts/verify-word-api.js` throws errors on token mapping failure (line 292) with a catch-all fallback to sentence diff, but the document state may be partially modified (deletions applied but insertions not). Recovery is attempted but not guaranteed to preserve user intent.

@@ -94,6 +94,12 @@ None yet.
 - [Phase 3]: Concurrent Word.run() write behavior not fully documented by Microsoft -- validate empirically during implementation
 - [Phase 3]: Bookmark cleanup strategy for failed comment insertions needs decision during planning
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | Save button updates existing prompt, New Prompt dropdown option for creating new prompts | 2026-03-12 | 63eefa3 | [1-save-button-updates-existing-prompt-new-](./quick/1-save-button-updates-existing-prompt-new-/) |
+
 ## Session Continuity
 
 Last session: 2026-03-12T02:58:25Z
