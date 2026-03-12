@@ -312,3 +312,87 @@ describe('validation', () => {
         expect(pm.getActiveMode()).toBe('both');
     });
 });
+
+// ============================================================================
+// updatePrompt: In-place prompt updates
+// ============================================================================
+
+describe('updatePrompt', () => {
+    test('updates only the template field, preserving id, name, description', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Old text', description: 'Legal desc' });
+
+        const result = pm.updatePrompt('amendment', 'legal-review', { template: 'New text' });
+
+        expect(result.id).toBe('legal-review');
+        expect(result.name).toBe('Legal Review');
+        expect(result.template).toBe('New text');
+        expect(result.description).toBe('Legal desc');
+    });
+
+    test('updates both template and description when both provided', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Old', description: 'Old desc' });
+
+        const result = pm.updatePrompt('amendment', 'legal-review', { template: 'X', description: 'Y' });
+
+        expect(result.template).toBe('X');
+        expect(result.description).toBe('Y');
+    });
+
+    test('returns the updated prompt object', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Old', description: 'Desc' });
+
+        const result = pm.updatePrompt('amendment', 'legal-review', { template: 'Updated' });
+
+        expect(result).toEqual({
+            id: 'legal-review',
+            name: 'Legal Review',
+            template: 'Updated',
+            description: 'Desc'
+        });
+    });
+
+    test('calls persistState after mutation', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Old', description: 'Desc' });
+
+        const spy = jest.spyOn(pm, 'persistState');
+        pm.updatePrompt('amendment', 'legal-review', { template: 'New' });
+
+        expect(spy).toHaveBeenCalledWith('amendment');
+        spy.mockRestore();
+    });
+
+    test('throws Error with "not found" for non-existent promptId', () => {
+        const pm = new PromptManager();
+
+        expect(() => {
+            pm.updatePrompt('amendment', 'nonexistent', { template: 'X' });
+        }).toThrow(/not found/);
+    });
+
+    test('throws Error for invalid category', () => {
+        const pm = new PromptManager();
+
+        expect(() => {
+            pm.updatePrompt('invalid', 'some-id', { template: 'X' });
+        }).toThrow(/Invalid category/);
+    });
+
+    test('does NOT change id or name even if passed in updates', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Old', description: 'Desc' });
+
+        const result = pm.updatePrompt('amendment', 'legal-review', {
+            id: 'hacked-id',
+            name: 'Hacked Name',
+            template: 'New template'
+        });
+
+        expect(result.id).toBe('legal-review');
+        expect(result.name).toBe('Legal Review');
+        expect(result.template).toBe('New template');
+    });
+});
