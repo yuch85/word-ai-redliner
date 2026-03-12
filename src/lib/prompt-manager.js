@@ -162,6 +162,36 @@ export class PromptManager {
     }
 
     /**
+     * Updates an existing prompt's allowed fields (template, description) in-place.
+     * Does not allow changing id or name.
+     *
+     * @param {string} category - One of 'context', 'amendment', 'comment'
+     * @param {string} promptId - The prompt ID to update
+     * @param {object} updates - Fields to update (only template and description are allowed)
+     * @returns {object} The updated prompt object
+     * @throws {Error} If promptId is not found or category is invalid
+     */
+    updatePrompt(category, promptId, updates) {
+        this._validateCategory(category);
+
+        const prompt = this.state[category].prompts.find(p => p.id === promptId);
+        if (!prompt) {
+            throw new Error(`Prompt "${promptId}" not found in ${category}`);
+        }
+
+        // Only allow template and description to be updated
+        if (updates.template !== undefined) {
+            prompt.template = updates.template;
+        }
+        if (updates.description !== undefined) {
+            prompt.description = updates.description;
+        }
+
+        this.persistState(category);
+        return prompt;
+    }
+
+    /**
      * Returns whether the current state allows submission.
      * At least one of amendment or comment must have an active prompt.
      * Context is optional and does not affect submission validation.
@@ -272,7 +302,14 @@ export class PromptManager {
         // User message from target category (amendment or comment) -- PRMT-08, PRMT-09
         const targetPrompt = this.getActivePrompt(category);
         if (targetPrompt) {
-            const content = targetPrompt.template.replace(/{selection}/g, selectionText);
+            let content;
+            if (targetPrompt.template.includes('{selection}')) {
+                // Template has explicit placeholder -- replace all occurrences
+                content = targetPrompt.template.replace(/{selection}/g, selectionText);
+            } else {
+                // Template has no placeholder -- append selection text so it is always sent
+                content = targetPrompt.template + '\n\n' + selectionText;
+            }
             messages.push({ role: 'user', content: content });
         }
 
