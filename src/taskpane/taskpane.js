@@ -76,7 +76,25 @@ function initialize() {
             handleCategoryPromptSelect(category, e.target.value);
         };
         document.getElementById(`savePromptBtn-${category}`).onclick = () => {
-            showSavePromptModal(category);
+            const select = document.getElementById(`promptSelect-${category}`);
+            const selectedValue = select.value;
+            const textarea = document.getElementById(`promptTextarea-${category}`);
+            const template = textarea.value.trim();
+
+            if (!template) {
+                addLog('Prompt template cannot be empty', 'warning');
+                return;
+            }
+
+            if (selectedValue && selectedValue !== '__new__') {
+                // Existing prompt selected -- update in-place
+                promptManager.updatePrompt(category, selectedValue, { template });
+                unsavedText[category] = template;
+                addLog(`Prompt updated: ${promptManager.getPrompt(category, selectedValue).name} (${category})`, 'success');
+            } else {
+                // No prompt or "+ New Prompt" selected -- show create modal
+                showSavePromptModal(category);
+            }
         };
         document.getElementById(`deletePromptBtn-${category}`).onclick = () => {
             handleDeletePromptConfirm(category);
@@ -262,6 +280,11 @@ function renderCategoryDropdown(category) {
 
     select.innerHTML = '<option value="">(None)</option>';
 
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = '+ New Prompt';
+    select.appendChild(newOpt);
+
     prompts.forEach((prompt) => {
         const option = document.createElement('option');
         option.value = prompt.id;
@@ -296,6 +319,17 @@ function renderAllDropdowns() {
  */
 function handleCategoryPromptSelect(category, promptId) {
     const textarea = document.getElementById(`promptTextarea-${category}`);
+
+    if (promptId === '__new__') {
+        promptManager.selectPrompt(category, null);
+        textarea.value = '';
+        unsavedText[category] = '';
+        addLog(`${capitalize(category)}: ready for new prompt`, "info");
+        updateDotIndicators();
+        updateStatusSummary();
+        updateReviewButton();
+        return;
+    }
 
     if (!promptId) {
         // "(None)" selected -- deactivate category
@@ -710,7 +744,8 @@ async function handleReviewSelection() {
             selectionText = selection.text;
         });
 
-        addLog(`Processing selection (${selectionText.length} chars)...`, "info");
+        const activeBackend = getActiveBackendConfig();
+        addLog(`Processing selection (${selectionText.length} chars) via ${activeBackend.model}...`, "info");
 
         // 2. Compose and send prompt
         // Amendment execution (existing synchronous workflow)
@@ -733,7 +768,7 @@ async function handleReviewSelection() {
             const backendConfig = getActiveBackendConfig();
             const response = await sendPrompt(backendConfig, fullPrompt, addLog);
 
-            addLog("LLM Response received", "success");
+            addLog(`LLM Response received [${backendConfig.model}]`, "success");
             addLog(`Response: ${response.substring(0, 100)}${response.length > 100 ? '...' : ''}`, "info");
 
             // 3. Apply Diff Logic
