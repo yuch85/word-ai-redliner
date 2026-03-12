@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-10T19:06:11.951Z"
-last_activity: 2026-03-10 -- Plan 03-02 executed (comment status bar UI, WordApi 1.4 detection, retry link)
+stopped_at: Paused at 03-03-PLAN.md Task 3 checkpoint (human-verify)
+last_updated: "2026-03-10T19:12:56.105Z"
+last_activity: 2026-03-12 -- Quick task 1 executed (save button updates existing prompt, + New Prompt dropdown)
 progress:
   total_phases: 3
   completed_phases: 2
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 Phase: 3 of 3 (Async Comment Queue)
 Plan: 2 of 3 in current phase
 Status: In Progress
-Last activity: 2026-03-10 -- Plan 03-02 executed (comment status bar UI, WordApi 1.4 detection, retry link)
+Last activity: 2026-03-12 -- Quick task 1 executed (save button updates existing prompt, + New Prompt dropdown)
 
 Progress: [████████░░] 75%
 
@@ -82,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 03-01]: ESM exports for comment-queue.js (matching project convention, not CommonJS as plan specified)
 - [Phase 03-01]: Pending count derived from array length (no separate counter) to prevent drift per Pitfall 6
 - [Phase 03-01]: Bookmark naming: _cq prefix + hex timestamp + 4 random alphanumeric chars (hidden, max 40 chars)
+- [Quick-1]: updatePrompt only allows template and description fields; id and name are immutable
+- [Quick-1]: __new__ sentinel value distinguishes "+ New Prompt" from regular prompt IDs in dropdown
 
 ### Pending Todos
 
@@ -94,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T19:06:11.950Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-12T02:58:25Z
+Stopped at: Completed quick task 1 (save button updates existing prompt, + New Prompt dropdown)
 Resume file: None
