@@ -41,7 +41,7 @@ function fireCommentRequest(selectionText, { config, sendPromptFn, promptManager
     // Step 2: Capture selection as bookmark, then hand off to resume function
     commentQueue.captureSelectionAsBookmark(bookmarkName)
         .then(() => {
-            log('Comment request fired...', 'info');
+            log(`Comment request fired [${config.model}]...`, 'info');
 
             // Step 3: Delegate to resumeCommentFromBookmark for LLM + insert
             resumeCommentFromBookmark(bookmarkName, requestId, selectionText, { config, sendPromptFn, promptManager, commentQueue, log, addLogWithRetryFn, updateStatusBarFn });
@@ -90,7 +90,7 @@ function resumeCommentFromBookmark(bookmarkName, requestId, selectionText, { con
 
             if (result.success) {
                 const rangePreview = (result.rangeText || '').substring(0, 30);
-                log(`Comment inserted on '${rangePreview}...'`, 'success');
+                log(`Comment inserted on '${rangePreview}...' [${config.model}]`, 'success');
             } else {
                 // Bookmark lost -- user deleted the text
                 // Display LLM response so analysis is not lost (per locked decision)

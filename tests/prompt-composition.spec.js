@@ -134,6 +134,29 @@ describe('edge cases', () => {
         expect(messages[1]).toEqual({ role: 'user', content: 'replaced text' });
     });
 
+    test('template without {selection} placeholder appends selection text automatically', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('comment', { name: 'Review', template: 'Review this clause for legal issues.', description: 'Review' });
+        pm.selectPrompt('comment', 'review');
+
+        const messages = pm.composeMessages('The tenant shall indemnify...', 'comment');
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0].role).toBe('user');
+        expect(messages[0].content).toContain('Review this clause for legal issues.');
+        expect(messages[0].content).toContain('The tenant shall indemnify...');
+    });
+
+    test('template without {selection} appends with double newline separator', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Amend', template: 'Improve this clause.', description: 'Amend' });
+        pm.selectPrompt('amendment', 'amend');
+
+        const messages = pm.composeMessages('clause text here', 'amendment');
+
+        expect(messages[0].content).toBe('Improve this clause.\n\nclause text here');
+    });
+
     test('composeMessages always returns array of {role, content} objects', () => {
         const pm = new PromptManager();
         pm.addPrompt('context', { name: 'Ctx', template: 'System prompt', description: '' });
