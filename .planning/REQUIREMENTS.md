@@ -45,6 +45,18 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **CMNT-10**: WordApi 1.4 runtime detection — comment features gracefully disabled if unsupported
 - [x] **CMNT-11**: Prototype spike validates bookmark range persistence under document edits before full implementation
 
+### Document Comment Summary
+
+- [ ] **SUMM-01**: Summary is a 4th prompt category tab alongside Context, Amendment, Comment with its own prompt library
+- [ ] **SUMM-02**: When Summary is active mode, Amendment and Comment are disabled; only Context remains available
+- [ ] **SUMM-03**: Review button relabels to "Generate Summary" when Summary is the active mode
+- [ ] **SUMM-04**: All document comments extracted with their associated text ranges via Office JS API
+- [ ] **SUMM-05**: Extracted comments + active Summary prompt + optional Context sent to LLM as structured input
+- [ ] **SUMM-06**: LLM analysis output opened as new Word document via Application.createDocument()
+- [ ] **SUMM-07**: Generated document includes formatted summary plus annex with source comments and cross-references
+- [ ] **SUMM-08**: After firing summary, user can switch back to Amendment/Comment mode immediately
+- [ ] **SUMM-09**: Status summary indicators below Save/Delete/Clear buttons removed (UI cleanup)
+
 ## v2 Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
@@ -114,9 +126,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CMNT-10 | Phase 3 | Complete |
 | CMNT-11 | Phase 3 | Complete |
 
+| SUMM-01 | Phase 4 | Pending |
+| SUMM-02 | Phase 4 | Pending |
+| SUMM-03 | Phase 4 | Pending |
+| SUMM-04 | Phase 4 | Pending |
+| SUMM-05 | Phase 4 | Pending |
+| SUMM-06 | Phase 4 | Pending |
+| SUMM-07 | Phase 4 | Pending |
+| SUMM-08 | Phase 4 | Pending |
+| SUMM-09 | Phase 4 | Pending |
+
 **Coverage:**
-- v1 requirements: 29 total
-- Mapped to phases: 29
+- v1 requirements: 38 total
+- Mapped to phases: 38
 - Unmapped: 0
 
 ---

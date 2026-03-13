@@ -2,7 +2,7 @@
 
 ## Overview
 
-This milestone adds three major capabilities to the Word AI Redliner add-in: vLLM as a second LLM backend alongside Ollama, a three-category prompt system (Context/Amendment/Comment) replacing the current single-prompt model, and async comment insertion that lets users continue working while the LLM processes analytical requests. The phases follow a strict dependency chain -- the unified LLM client enables the prompt system's chat completions composition, and the prompt system enables the comment queue's prompt assembly.
+This milestone adds four major capabilities to the Word AI Redliner add-in: vLLM as a second LLM backend alongside Ollama, a three-category prompt system (Context/Amendment/Comment) replacing the single-prompt model, async comment insertion that lets users continue working while the LLM processes, and a document comment summary feature that extracts all comments, analyzes them via LLM, and exports a formatted Word document. The phases follow a dependency chain -- the unified LLM client enables the prompt system's chat completions composition, the prompt system enables the comment queue's prompt assembly, and the summary feature builds on the prompt system and LLM client.
 
 ## Phases
 
@@ -15,6 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: LLM Client + vLLM Backend** - Extract LLM logic into unified client, add vLLM support, strip think tags (completed 2026-03-10)
 - [ ] **Phase 2: Three-Category Prompt System** - Split prompts into Context/Amendment/Comment categories with activation rules
 - [ ] **Phase 3: Async Comment Queue** - Fire-and-forget comment insertion with bookmark-based range persistence
+- [ ] **Phase 4: Document Comment Summary** - Extract all document comments, summarize via LLM, export as new Word document
 
 ## Phase Details
 
@@ -69,13 +70,34 @@ Plans:
 - [ ] 03-02-PLAN.md — Status bar UI, WordApi 1.4 detection, and addLogWithRetry extension
 - [ ] 03-03-PLAN.md — Integration: wire comment queue + LLM client + prompt system into fire-and-forget workflow
 
+### Phase 4: Document Comment Summary
+**Goal**: Users can extract all document comments with associated text, send to LLM with a configurable summary prompt, and export formatted analysis as a new Word document with cross-referenced annex
+**Depends on**: Phase 1, Phase 2
+**Requirements**: SUMM-01, SUMM-02, SUMM-03, SUMM-04, SUMM-05, SUMM-06, SUMM-07, SUMM-08, SUMM-09
+**Success Criteria** (what must be TRUE):
+  1. User sees a 4th "Summary" tab in the prompt UI alongside Context, Amendment, and Comment, with its own library of saveable prompts
+  2. When Summary is the active mode, Amendment and Comment tabs are disabled; only Context remains available as supplementary context
+  3. Review button relabels to "Generate Summary" (or similar) when Summary is active, and triggers the summary workflow instead of selection-based review
+  4. All comments in the document are extracted with their associated text ranges, regardless of who created them
+  5. LLM receives the extracted comments + associated text + active Summary prompt + optional Context prompt, and returns analysis
+  6. LLM output opens as a new Word document via Application.createDocument() with formatted content (not raw markdown)
+  7. Generated document includes an annex with source comments and reliable cross-references (bookmarks, footnotes, or equivalent)
+  8. After firing a summary request, user can immediately switch back to Amendment/Comment mode and continue working
+  9. Status summary indicators below Save/Delete/Clear buttons are removed (UI simplification)
+
+**Plans**: TBD
+
+Plans:
+- (planning in progress)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3
+Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. LLM Client + vLLM Backend | 2/2 | Complete   | 2026-03-10 |
 | 2. Three-Category Prompt System | 2/3 | In Progress|  |
 | 3. Async Comment Queue | 0/3 | Planning complete | - |
+| 4. Document Comment Summary | 0/? | Planning | - |
