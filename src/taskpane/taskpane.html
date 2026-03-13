@@ -38,6 +38,10 @@
                     <span class="tab-dot" id="dot-comment"></span>
                     Comment
                 </button>
+                <button role="tab" id="tab-summary" aria-selected="false" aria-controls="panel-summary" class="prompt-tab" tabindex="-1">
+                    <span class="tab-dot" id="dot-summary"></span>
+                    Summary
+                </button>
             </div>
 
             <!-- Context Panel -->
@@ -93,27 +97,28 @@
                     <button id="resetPromptBtn-comment" class="btn btn-compact">Clear</button>
                 </div>
             </div>
+
+            <!-- Summary Panel -->
+            <div role="tabpanel" id="panel-summary" aria-labelledby="tab-summary" hidden>
+                <div class="form-group">
+                    <select id="promptSelect-summary" class="form-control">
+                        <option value="">(None)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <textarea id="promptTextarea-summary" class="form-control" rows="6"
+                        placeholder="Enter summary prompt. Use {comments} to include extracted comment data. The LLM should output HTML."></textarea>
+                </div>
+                <div class="button-group compact-toolbar">
+                    <button id="savePromptBtn-summary" class="btn btn-compact">Save</button>
+                    <button id="deletePromptBtn-summary" class="btn btn-compact">Delete</button>
+                    <button id="resetPromptBtn-summary" class="btn btn-compact">Clear</button>
+                </div>
+            </div>
         </section>
 
         <!-- Main Actions -->
         <section class="action-section">
-            <div class="prompt-status-summary" id="promptStatusSummary">
-                <div class="status-line" data-category="context">
-                    <span class="status-dot inactive"></span>
-                    <span class="status-label">Context:</span>
-                    <span class="status-value">(none)</span>
-                </div>
-                <div class="status-line" data-category="amendment">
-                    <span class="status-dot inactive"></span>
-                    <span class="status-label">Amend:</span>
-                    <span class="status-value">(none)</span>
-                </div>
-                <div class="status-line" data-category="comment">
-                    <span class="status-dot inactive"></span>
-                    <span class="status-label">Comment:</span>
-                    <span class="status-value">(none)</span>
-                </div>
-            </div>
             <!-- Comment Status Bar -->
             <div id="commentStatusBar" class="comment-status-bar" style="display: none;">
                 <span class="comment-spinner"></span>
