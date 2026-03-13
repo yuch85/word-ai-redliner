@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-02-PLAN.md (comment-extractor + document-generator modules)
-last_updated: "2026-03-13T14:59:27.132Z"
+stopped_at: Completed 04-01-PLAN.md (PromptManager summary category + composeSummaryMessages)
+last_updated: "2026-03-13T14:59:50.345Z"
 last_activity: 2026-03-13 -- Plan 04-02 executed (comment-extractor + document-generator modules)
 progress:
   total_phases: 4
@@ -90,6 +90,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Two-phase createSummaryDocument: first Word.run creates+opens, second inserts HTML (avoids WordApiHiddenDocument)
 - [Phase 04]: escapeHtml utility for sanitizing user-generated content before insertHtml
 - [Phase 04]: Annex uses numbered headings (Comment 1, 2...) for visual cross-referencing, not bookmark hyperlinks
+- [Phase 04-01]: Summary mode takes priority over amendment/comment in getActiveMode -- checked first
+- [Phase 04-01]: composeSummaryMessages uses {comments} placeholder with fallback append pattern matching composeMessages {selection} pattern
 
 ### Pending Todos
 
@@ -108,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T14:59:14.523Z
-Stopped at: Completed 04-02-PLAN.md (comment-extractor + document-generator modules)
+Last session: 2026-03-13T14:59:35.845Z
+Stopped at: Completed 04-01-PLAN.md (PromptManager summary category + composeSummaryMessages)
 Resume file: None

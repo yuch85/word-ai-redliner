@@ -47,11 +47,11 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Document Comment Summary
 
-- [ ] **SUMM-01**: Summary is a 4th prompt category tab alongside Context, Amendment, Comment with its own prompt library
-- [ ] **SUMM-02**: When Summary is active mode, Amendment and Comment are disabled; only Context remains available
+- [x] **SUMM-01**: Summary is a 4th prompt category tab alongside Context, Amendment, Comment with its own prompt library
+- [x] **SUMM-02**: When Summary is active mode, Amendment and Comment are disabled; only Context remains available
 - [ ] **SUMM-03**: Review button relabels to "Generate Summary" when Summary is the active mode
 - [x] **SUMM-04**: All document comments extracted with their associated text ranges via Office JS API
-- [ ] **SUMM-05**: Extracted comments + active Summary prompt + optional Context sent to LLM as structured input
+- [x] **SUMM-05**: Extracted comments + active Summary prompt + optional Context sent to LLM as structured input
 - [x] **SUMM-06**: LLM analysis output opened as new Word document via Application.createDocument()
 - [x] **SUMM-07**: Generated document includes formatted summary plus annex with source comments and cross-references
 - [ ] **SUMM-08**: After firing summary, user can switch back to Amendment/Comment mode immediately
@@ -126,11 +126,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CMNT-10 | Phase 3 | Complete |
 | CMNT-11 | Phase 3 | Complete |
 
-| SUMM-01 | Phase 4 | Pending |
-| SUMM-02 | Phase 4 | Pending |
+| SUMM-01 | Phase 4 | Complete |
+| SUMM-02 | Phase 4 | Complete |
 | SUMM-03 | Phase 4 | Pending |
 | SUMM-04 | Phase 4 | Complete |
-| SUMM-05 | Phase 4 | Pending |
+| SUMM-05 | Phase 4 | Complete |
 | SUMM-06 | Phase 4 | Complete |
 | SUMM-07 | Phase 4 | Complete |
 | SUMM-08 | Phase 4 | Pending |
