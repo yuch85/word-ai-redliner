@@ -1,6 +1,6 @@
 /**
  * Unit tests for prompt composition (message assembly for chat completions).
- * Covers requirements: PRMT-07, PRMT-08, PRMT-09
+ * Covers requirements: PRMT-07, PRMT-08, PRMT-09, SUMM-05
  */
 import { PromptManager, CATEGORIES } from '../src/lib/prompt-manager.js';
 
@@ -165,6 +165,113 @@ describe('edge cases', () => {
         pm.selectPrompt('comment', 'cmt');
 
         const messages = pm.composeMessages('text', 'comment');
+
+        expect(Array.isArray(messages)).toBe(true);
+        messages.forEach(msg => {
+            expect(msg).toHaveProperty('role');
+            expect(msg).toHaveProperty('content');
+            expect(typeof msg.role).toBe('string');
+            expect(typeof msg.content).toBe('string');
+        });
+    });
+});
+
+// ============================================================================
+// SUMM-05: composeSummaryMessages
+// ============================================================================
+
+describe('SUMM-05: composeSummaryMessages', () => {
+    const sampleComments = [
+        { index: 1, commentText: 'This clause is ambiguous', associatedText: 'The party shall', author: 'Jane Doe', date: '2026-03-01', resolved: false },
+        { index: 2, commentText: 'Consider adding a deadline', associatedText: 'within a reasonable time', author: 'John Smith', date: '2026-03-02', resolved: true }
+    ];
+
+    test('with active summary prompt and {comments} placeholder, returns messages with placeholder replaced by formatted comment data', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Exec Summary', template: 'Summarize these comments:\n{comments}', description: 'Exec' });
+        pm.selectPrompt('summary', 'exec-summary');
+
+        const messages = pm.composeSummaryMessages(sampleComments);
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0].role).toBe('user');
+        expect(messages[0].content).toContain('Summarize these comments:');
+        expect(messages[0].content).toContain('[Comment 1] by Jane Doe');
+        expect(messages[0].content).toContain('[Comment 2] by John Smith');
+        expect(messages[0].content).not.toContain('{comments}');
+    });
+
+    test('with active context + summary prompts, returns system message + user message', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('context', { name: 'Legal Context', template: 'You are a legal document reviewer', description: 'Legal' });
+        pm.selectPrompt('context', 'legal-context');
+        pm.addPrompt('summary', { name: 'Exec Summary', template: 'Summarize: {comments}', description: 'Exec' });
+        pm.selectPrompt('summary', 'exec-summary');
+
+        const messages = pm.composeSummaryMessages(sampleComments);
+
+        expect(messages).toHaveLength(2);
+        expect(messages[0]).toEqual({ role: 'system', content: 'You are a legal document reviewer' });
+        expect(messages[1].role).toBe('user');
+        expect(messages[1].content).toContain('Summarize:');
+    });
+
+    test('without {comments} placeholder, appends comment data after double newline', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Exec Summary', template: 'Please provide a summary of all comments.', description: 'Exec' });
+        pm.selectPrompt('summary', 'exec-summary');
+
+        const messages = pm.composeSummaryMessages(sampleComments);
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0].content).toBe(
+            'Please provide a summary of all comments.\n\n' +
+            '[Comment 1] by Jane Doe on "The party shall":\n"This clause is ambiguous"\n\n' +
+            '[Comment 2] by John Smith on "within a reasonable time":\n"Consider adding a deadline"'
+        );
+    });
+
+    test('returns empty array when no summary prompt is active', () => {
+        const pm = new PromptManager();
+
+        const messages = pm.composeSummaryMessages(sampleComments);
+
+        expect(messages).toEqual([]);
+    });
+
+    test('multiple comments formatted with index numbers, author names, associated text', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Exec Summary', template: '{comments}', description: 'Exec' });
+        pm.selectPrompt('summary', 'exec-summary');
+
+        const messages = pm.composeSummaryMessages(sampleComments);
+
+        const content = messages[0].content;
+        expect(content).toContain('[Comment 1] by Jane Doe on "The party shall":\n"This clause is ambiguous"');
+        expect(content).toContain('[Comment 2] by John Smith on "within a reasonable time":\n"Consider adding a deadline"');
+    });
+
+    test('comments are separated by double newlines', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Exec Summary', template: '{comments}', description: 'Exec' });
+        pm.selectPrompt('summary', 'exec-summary');
+
+        const messages = pm.composeSummaryMessages(sampleComments);
+
+        const content = messages[0].content;
+        // Two comments should be separated by \n\n
+        const parts = content.split('\n\n');
+        expect(parts).toHaveLength(2);
+    });
+
+    test('returns array of {role, content} objects', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('context', { name: 'Ctx', template: 'System', description: '' });
+        pm.selectPrompt('context', 'ctx');
+        pm.addPrompt('summary', { name: 'Sum', template: '{comments}', description: '' });
+        pm.selectPrompt('summary', 'sum');
+
+        const messages = pm.composeSummaryMessages(sampleComments);
 
         expect(Array.isArray(messages)).toBe(true);
         messages.forEach(msg => {
