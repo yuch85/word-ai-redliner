@@ -7,6 +7,8 @@ import { sendPrompt, testConnection as llmTestConnection } from '../lib/llm-clie
 import { PromptManager, CATEGORIES } from '../lib/prompt-manager.js';
 import { CommentQueue } from '../lib/comment-queue.js';
 import { fireCommentRequest } from '../lib/comment-request.js';
+import { extractAllComments } from '../lib/comment-extractor.js';
+import { createSummaryDocument, buildSummaryHtml } from '../lib/document-generator.js';
 
 // Global configuration (defaults from env, overridable via UI/localStorage)
 let config = {
@@ -37,7 +39,7 @@ function getActiveBackendConfig() {
 
 const promptManager = new PromptManager();
 let currentTab = 'context';
-const unsavedText = { context: '', amendment: '', comment: '' };
+const unsavedText = { context: '', amendment: '', comment: '', summary: '' };
 let isProcessing = false;
 let supportsComments = false;  // Set during initialize() via WordApi 1.4 check
 const commentQueue = new CommentQueue(addLog);
@@ -104,17 +106,6 @@ function initialize() {
         };
     }
 
-    // Status summary -- click to jump to tab
-    const statusLines = document.querySelectorAll('#promptStatusSummary .status-line');
-    statusLines.forEach((line) => {
-        line.addEventListener('click', () => {
-            const cat = line.getAttribute('data-category');
-            if (cat) {
-                switchTab(cat);
-            }
-        });
-    });
-
     // Modal buttons
     document.getElementById("savePromptConfirmBtn").onclick = handleSavePromptConfirm;
     document.getElementById("savePromptCancelBtn").onclick = hideSavePromptModal;
@@ -125,8 +116,8 @@ function initialize() {
     // Render prompt UI from PromptManager state
     renderAllDropdowns();
     updateDotIndicators();
-    updateStatusSummary();
     updateReviewButton();
+    updateTabDisabledState();
 
     // Detect WordApi 1.4 support for comment features
     if (typeof Office !== 'undefined' && Office.context && Office.context.requirements) {
@@ -326,8 +317,8 @@ function handleCategoryPromptSelect(category, promptId) {
         unsavedText[category] = '';
         addLog(`${capitalize(category)}: ready for new prompt`, "info");
         updateDotIndicators();
-        updateStatusSummary();
         updateReviewButton();
+        updateTabDisabledState();
         return;
     }
 
@@ -348,8 +339,8 @@ function handleCategoryPromptSelect(category, promptId) {
     }
 
     updateDotIndicators();
-    updateStatusSummary();
     updateReviewButton();
+    updateTabDisabledState();
 }
 
 /**
@@ -359,6 +350,10 @@ function handleCategoryPromptSelect(category, promptId) {
  */
 function switchTab(category) {
     if (category === currentTab) return;
+
+    // Block switching to disabled tabs
+    const targetTab = document.getElementById(`tab-${category}`);
+    if (targetTab && targetTab.classList.contains('disabled')) return;
 
     // Save current textarea content before switching
     const currentTextarea = document.getElementById(`promptTextarea-${currentTab}`);
@@ -386,6 +381,8 @@ function switchTab(category) {
     // Restore textarea content for new tab
     const newTextarea = document.getElementById(`promptTextarea-${category}`);
     newTextarea.value = unsavedText[category];
+
+    updateTabDisabledState();
 }
 
 /**
@@ -421,6 +418,32 @@ function handleTabKeydown(e) {
 }
 
 /**
+ * Enables or disables tabs based on the active mode.
+ * In summary mode: amendment and comment tabs are disabled.
+ * In non-summary mode: all tabs are enabled.
+ * Context tab is always enabled.
+ */
+function updateTabDisabledState() {
+    const mode = promptManager.getActiveMode();
+    const isSummaryMode = (mode === 'summary');
+
+    const amendmentTab = document.getElementById('tab-amendment');
+    const commentTab = document.getElementById('tab-comment');
+
+    if (amendmentTab) {
+        amendmentTab.classList.toggle('disabled', isSummaryMode);
+        if (isSummaryMode) amendmentTab.setAttribute('aria-disabled', 'true');
+        else amendmentTab.removeAttribute('aria-disabled');
+    }
+
+    if (commentTab) {
+        commentTab.classList.toggle('disabled', isSummaryMode);
+        if (isSummaryMode) commentTab.setAttribute('aria-disabled', 'true');
+        else commentTab.removeAttribute('aria-disabled');
+    }
+}
+
+/**
  * Updates the dot indicators on each tab to reflect activation state.
  * Green dot = active prompt, red dot = no active prompt.
  */
@@ -429,31 +452,6 @@ function updateDotIndicators() {
         const dot = document.getElementById(`dot-${category}`);
         const isActive = promptManager.getActivePrompt(category) !== null;
         dot.classList.toggle('active', isActive);
-    }
-}
-
-/**
- * Updates the status summary widget above the Review button.
- * Shows active prompt name or "(none)" for each category.
- */
-function updateStatusSummary() {
-    const summary = document.getElementById('promptStatusSummary');
-
-    for (const category of CATEGORIES) {
-        const line = summary.querySelector(`.status-line[data-category="${category}"]`);
-        if (!line) continue;
-
-        const dot = line.querySelector('.status-dot');
-        const value = line.querySelector('.status-value');
-        const activePrompt = promptManager.getActivePrompt(category);
-
-        if (activePrompt) {
-            dot.classList.add('active');
-            value.textContent = activePrompt.name;
-        } else {
-            dot.classList.remove('active');
-            value.textContent = '(none)';
-        }
     }
 }
 
@@ -468,6 +466,11 @@ function updateReviewButton() {
     const mode = promptManager.getActiveMode();
 
     switch (mode) {
+        case 'summary':
+            btn.textContent = 'Generate Summary';
+            btn.disabled = false;
+            btn.title = 'Extract all comments and generate summary document';
+            break;
         case 'amendment':
             btn.textContent = 'Amend Selection \u2192';
             btn.disabled = false;
@@ -567,8 +570,8 @@ function handleDeletePromptConfirm(category) {
     unsavedText[category] = '';
 
     updateDotIndicators();
-    updateStatusSummary();
     updateReviewButton();
+    updateTabDisabledState();
 }
 
 /**
@@ -707,7 +710,86 @@ function populateModels(models) {
 // LLM INTEGRATION
 // ============================================================================
 
+/**
+ * Handles the summary generation workflow.
+ * Extracts all comments, sends to LLM with summary prompt, creates new document.
+ * Fire-and-forget: user can switch modes immediately after triggering.
+ */
+async function handleSummaryGeneration() {
+    const btn = document.getElementById('reviewBtn');
+
+    try {
+        btn.classList.add('loading');
+        btn.disabled = true;
+        addLog('Extracting document comments...', 'info');
+
+        // 1. Extract all comments
+        const comments = await extractAllComments();
+
+        if (comments.length === 0) {
+            addLog('No comments found in document. Add comments first, then generate summary.', 'warning');
+            return;
+        }
+
+        addLog(`Found ${comments.length} comment(s). Sending to LLM...`, 'info');
+
+        // 2. Compose messages using PromptManager
+        const messages = promptManager.composeSummaryMessages(comments);
+
+        if (messages.length === 0) {
+            addLog('No summary prompt active. Select a Summary prompt first.', 'warning');
+            return;
+        }
+
+        // 3. Send to LLM (flatten messages to single prompt for sendPrompt compatibility)
+        const backendConfig = getActiveBackendConfig();
+        let fullPrompt;
+        if (messages.length >= 2 && messages[0].role === 'system') {
+            fullPrompt = messages[0].content + '\n\n' + messages.slice(1).map(m => m.content).join('\n\n');
+        } else {
+            fullPrompt = messages.map(m => m.content).join('\n\n');
+        }
+
+        const llmResponse = await sendPrompt(backendConfig, fullPrompt, addLog);
+        addLog(`Summary received (${llmResponse.length} chars). Creating document...`, 'info');
+
+        // 4. Build HTML and create document
+        // Get document title for the summary doc
+        let docTitle = 'Comment Summary';
+        try {
+            await Word.run(async (context) => {
+                const props = context.document.properties;
+                props.load('title');
+                await context.sync();
+                if (props.title) {
+                    docTitle = `Comment Summary - ${props.title}`;
+                }
+            });
+        } catch (e) {
+            // Title lookup failed -- use default
+        }
+
+        const html = buildSummaryHtml(llmResponse, comments, docTitle);
+        await createSummaryDocument(html, docTitle, addLog);
+
+        addLog('Summary document opened successfully.', 'success');
+
+    } catch (error) {
+        addLog(`Summary generation failed: ${error.message}`, 'error');
+        console.error('Summary generation error:', error);
+    } finally {
+        btn.classList.remove('loading');
+        updateReviewButton();
+    }
+}
+
 async function handleReviewSelection() {
+    // Summary mode uses a separate workflow
+    if (promptManager.getActiveMode() === 'summary') {
+        handleSummaryGeneration();
+        return;
+    }
+
     if (isProcessing) {
         addLog("Already processing a request", "warning");
         return;
