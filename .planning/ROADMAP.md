@@ -85,10 +85,12 @@ Plans:
   8. After firing a summary request, user can immediately switch back to Amendment/Comment mode and continue working
   9. Status summary indicators below Save/Delete/Clear buttons are removed (UI simplification)
 
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- (planning in progress)
+- [ ] 04-01-PLAN.md — Extend PromptManager with summary category, mode logic, and composeSummaryMessages
+- [ ] 04-02-PLAN.md — Comment extractor and document generator modules with tests
+- [ ] 04-03-PLAN.md — UI wiring: Summary tab, mode switching, button relabel, and summary workflow integration
 
 ## Progress
 
@@ -100,4 +102,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. LLM Client + vLLM Backend | 2/2 | Complete   | 2026-03-10 |
 | 2. Three-Category Prompt System | 2/3 | In Progress|  |
 | 3. Async Comment Queue | 0/3 | Planning complete | - |
-| 4. Document Comment Summary | 0/? | Planning | - |
+| 4. Document Comment Summary | 0/3 | Planning complete | - |
