@@ -25,11 +25,11 @@ beforeEach(() => {
 // ============================================================================
 
 describe('PromptManager import', () => {
-    test('PromptManager can be instantiated and has three expected categories', () => {
+    test('PromptManager can be instantiated and has four expected categories', () => {
         const pm = new PromptManager();
         const state = pm.getState();
-        expect(Object.keys(state)).toEqual(['context', 'amendment', 'comment']);
-        expect(CATEGORIES).toEqual(['context', 'amendment', 'comment']);
+        expect(Object.keys(state)).toEqual(['context', 'amendment', 'comment', 'summary']);
+        expect(CATEGORIES).toEqual(['context', 'amendment', 'comment', 'summary']);
     });
 });
 

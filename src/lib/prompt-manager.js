@@ -1,7 +1,7 @@
 /**
  * PromptManager Module
  *
- * Data layer for the three-category prompt system (Context, Amendment, Comment).
+ * Data layer for the four-category prompt system (Context, Amendment, Comment, Summary).
  * Encapsulates state model, CRUD operations, activation logic, validation,
  * and localStorage persistence. Extracted from the monolithic taskpane.js
  * to provide a testable, reusable contract for the UI layer.
@@ -10,13 +10,13 @@
  */
 
 /**
- * The three prompt categories.
+ * The four prompt categories.
  * @type {string[]}
  */
-export const CATEGORIES = ['context', 'amendment', 'comment'];
+export const CATEGORIES = ['context', 'amendment', 'comment', 'summary'];
 
 /**
- * Manages prompt state across three independent categories.
+ * Manages prompt state across four independent categories.
  *
  * Each category maintains its own array of prompts and an optional
  * activePromptId. Prompts are persisted independently in localStorage
@@ -27,7 +27,8 @@ export class PromptManager {
         this.state = {
             context: { prompts: [], activePromptId: null },
             amendment: { prompts: [], activePromptId: null },
-            comment: { prompts: [], activePromptId: null }
+            comment: { prompts: [], activePromptId: null },
+            summary: { prompts: [], activePromptId: null }
         };
     }
 
@@ -193,21 +194,25 @@ export class PromptManager {
 
     /**
      * Returns whether the current state allows submission.
-     * At least one of amendment or comment must have an active prompt.
+     * At least one of amendment, comment, or summary must have an active prompt.
      * Context is optional and does not affect submission validation.
      *
      * @returns {boolean}
      */
     canSubmit() {
-        return !!(this.state.amendment.activePromptId || this.state.comment.activePromptId);
+        return !!(this.state.amendment.activePromptId || this.state.comment.activePromptId || this.state.summary.activePromptId);
     }
 
     /**
      * Returns the active mode based on which task categories have active prompts.
+     * Summary takes priority over amendment/comment when active.
      *
-     * @returns {'amendment'|'comment'|'both'|'none'}
+     * @returns {'summary'|'amendment'|'comment'|'both'|'none'}
      */
     getActiveMode() {
+        const hasSummary = !!this.state.summary.activePromptId;
+        if (hasSummary) return 'summary';
+
         const hasAmendment = !!this.state.amendment.activePromptId;
         const hasComment = !!this.state.comment.activePromptId;
 
