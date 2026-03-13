@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Paused at 03-03-PLAN.md Task 3 checkpoint (human-verify)
-last_updated: "2026-03-10T19:12:56.105Z"
-last_activity: 2026-03-12 -- Quick task 1 executed (save button updates existing prompt, + New Prompt dropdown)
+stopped_at: Completed 04-02-PLAN.md (comment-extractor + document-generator modules)
+last_updated: "2026-03-13T14:59:27.132Z"
+last_activity: 2026-03-13 -- Plan 04-02 executed (comment-extractor + document-generator modules)
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 2
-  total_plans: 8
-  completed_plans: 7
-  percent: 75
+  total_plans: 11
+  completed_plans: 9
+  percent: 73
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Selected text goes to LLM, comes back as tracked changes or comments in Word -- the user never leaves the document.
-**Current focus:** Phase 3: Async Comment Queue (comment status bar UI complete, integration next)
+**Current focus:** Phase 4: Document Comment Summary (Office JS modules built, PromptManager + UI next)
 
 ## Current Position
 
-Phase: 3 of 3 (Async Comment Queue)
+Phase: 4 of 4 (Document Comment Summary)
 Plan: 2 of 3 in current phase
 Status: In Progress
-Last activity: 2026-03-12 -- Quick task 1 executed (save button updates existing prompt, + New Prompt dropdown)
+Last activity: 2026-03-13 -- Plan 04-02 executed (comment-extractor + document-generator modules)
 
-Progress: [████████░░] 75%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
@@ -53,6 +53,8 @@ Progress: [████████░░] 75%
 
 *Updated after each plan completion*
 | Phase 03 P01 | 4 | 2 tasks | 3 files |
+| Phase 04 P02 | 4 | 2 tasks | 4 files |
+| Phase 04 P01 | 5 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -84,6 +86,10 @@ Recent decisions affecting current work:
 - [Phase 03-01]: Bookmark naming: _cq prefix + hex timestamp + 4 random alphanumeric chars (hidden, max 40 chars)
 - [Quick-1]: updatePrompt only allows template and description fields; id and name are immutable
 - [Quick-1]: __new__ sentinel value distinguishes "+ New Prompt" from regular prompt IDs in dropdown
+- [Phase 04]: Three-sync batch loading pattern for comment extraction (items -> properties -> ranges)
+- [Phase 04]: Two-phase createSummaryDocument: first Word.run creates+opens, second inserts HTML (avoids WordApiHiddenDocument)
+- [Phase 04]: escapeHtml utility for sanitizing user-generated content before insertHtml
+- [Phase 04]: Annex uses numbered headings (Comment 1, 2...) for visual cross-referencing, not bookmark hyperlinks
 
 ### Pending Todos
 
@@ -102,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T02:58:25Z
-Stopped at: Completed quick task 1 (save button updates existing prompt, + New Prompt dropdown)
+Last session: 2026-03-13T14:59:14.523Z
+Stopped at: Completed 04-02-PLAN.md (comment-extractor + document-generator modules)
 Resume file: None
