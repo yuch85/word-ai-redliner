@@ -322,9 +322,48 @@ export class PromptManager {
     }
 
     /**
+     * Composes a messages array for summary generation from extracted comments.
+     *
+     * If a Context prompt is active, it becomes the system message.
+     * The active Summary prompt becomes the user message with {comments}
+     * placeholder replaced by structured comment data.
+     *
+     * @param {Array<{index: number, commentText: string, associatedText: string, author: string, date: string, resolved: boolean}>} extractedComments
+     * @returns {Array<{role: string, content: string}>} Messages array for chat completions
+     */
+    composeSummaryMessages(extractedComments) {
+        const messages = [];
+
+        // System message from context (if active)
+        const contextPrompt = this.getActivePrompt('context');
+        if (contextPrompt) {
+            messages.push({ role: 'system', content: contextPrompt.template });
+        }
+
+        // Build structured comment data string
+        const commentData = extractedComments.map(c =>
+            `[Comment ${c.index}] by ${c.author} on "${c.associatedText}":\n"${c.commentText}"`
+        ).join('\n\n');
+
+        // User message from summary prompt with {comments} replacement
+        const summaryPrompt = this.getActivePrompt('summary');
+        if (summaryPrompt) {
+            let content = summaryPrompt.template;
+            if (content.includes('{comments}')) {
+                content = content.replace(/{comments}/g, commentData);
+            } else {
+                content = content + '\n\n' + commentData;
+            }
+            messages.push({ role: 'user', content });
+        }
+
+        return messages;
+    }
+
+    /**
      * Returns the full state object (for UI consumers).
      *
-     * @returns {object} State with context, amendment, comment sub-objects
+     * @returns {object} State with context, amendment, comment, summary sub-objects
      */
     getState() {
         return this.state;
