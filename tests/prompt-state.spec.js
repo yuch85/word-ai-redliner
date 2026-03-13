@@ -1,6 +1,6 @@
 /**
  * Unit tests for PromptManager state model, CRUD, activation, and validation.
- * Covers requirements: PRMT-01, PRMT-02, PRMT-03, PRMT-04, PRMT-05, PRMT-06
+ * Covers requirements: PRMT-01, PRMT-02, PRMT-03, PRMT-04, PRMT-05, PRMT-06, SUMM-01, SUMM-02
  */
 import { PromptManager, CATEGORIES } from '../src/lib/prompt-manager.js';
 
@@ -25,14 +25,14 @@ beforeEach(() => {
 // ============================================================================
 
 describe('categories', () => {
-    test('PromptManager initializes with three categories: context, amendment, comment', () => {
+    test('PromptManager initializes with four categories: context, amendment, comment, summary', () => {
         const pm = new PromptManager();
         const state = pm.getState();
-        expect(Object.keys(state)).toEqual(['context', 'amendment', 'comment']);
+        expect(Object.keys(state)).toEqual(['context', 'amendment', 'comment', 'summary']);
     });
 
-    test('CATEGORIES constant contains the three category names', () => {
-        expect(CATEGORIES).toEqual(['context', 'amendment', 'comment']);
+    test('CATEGORIES constant contains the four category names', () => {
+        expect(CATEGORIES).toEqual(['context', 'amendment', 'comment', 'summary']);
     });
 
     test('each category starts with empty prompts array and null activePromptId', () => {
@@ -394,5 +394,162 @@ describe('updatePrompt', () => {
         expect(result.id).toBe('legal-review');
         expect(result.name).toBe('Legal Review');
         expect(result.template).toBe('New template');
+    });
+});
+
+// ============================================================================
+// SUMM-01: Summary category support
+// ============================================================================
+
+describe('SUMM-01: summary category', () => {
+    test('CATEGORIES contains 4 entries including summary', () => {
+        expect(CATEGORIES).toHaveLength(4);
+        expect(CATEGORIES).toContain('summary');
+    });
+
+    test('PromptManager state has summary key with empty prompts and null activePromptId', () => {
+        const pm = new PromptManager();
+        const state = pm.getState();
+        expect(state.summary).toBeDefined();
+        expect(state.summary.prompts).toEqual([]);
+        expect(state.summary.activePromptId).toBeNull();
+    });
+
+    test('addPrompt("summary", {...}) works and returns prompt object', () => {
+        const pm = new PromptManager();
+        const result = pm.addPrompt('summary', {
+            name: 'Executive Summary',
+            template: 'Summarize these comments: {comments}',
+            description: 'Executive-level summary'
+        });
+
+        expect(result).toEqual({
+            id: 'executive-summary',
+            name: 'Executive Summary',
+            template: 'Summarize these comments: {comments}',
+            description: 'Executive-level summary'
+        });
+    });
+
+    test('getPrompts("summary") returns added prompts', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Brief Summary', template: 'Brief: {comments}', description: 'Brief' });
+        pm.addPrompt('summary', { name: 'Detailed Summary', template: 'Detail: {comments}', description: 'Detailed' });
+
+        const prompts = pm.getPrompts('summary');
+        expect(prompts).toHaveLength(2);
+        expect(prompts[0].id).toBe('brief-summary');
+        expect(prompts[1].id).toBe('detailed-summary');
+    });
+
+    test('selectPrompt("summary", id) activates and getActivePrompt("summary") returns it', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Executive Summary', template: '{comments}', description: 'Exec' });
+
+        pm.selectPrompt('summary', 'executive-summary');
+
+        const active = pm.getActivePrompt('summary');
+        expect(active).not.toBeNull();
+        expect(active.id).toBe('executive-summary');
+    });
+
+    test('deletePrompt("summary", id) removes and clears active if deleted was active', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Executive Summary', template: '{comments}', description: 'Exec' });
+        pm.selectPrompt('summary', 'executive-summary');
+
+        expect(pm.getActivePrompt('summary')).not.toBeNull();
+
+        pm.deletePrompt('summary', 'executive-summary');
+
+        expect(pm.getPrompts('summary')).toHaveLength(0);
+        expect(pm.getActivePrompt('summary')).toBeNull();
+    });
+
+    test('updatePrompt("summary", id, { template: "new" }) works', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Executive Summary', template: 'Old', description: 'Desc' });
+
+        const result = pm.updatePrompt('summary', 'executive-summary', { template: 'New template' });
+
+        expect(result.template).toBe('New template');
+        expect(result.id).toBe('executive-summary');
+        expect(result.name).toBe('Executive Summary');
+    });
+});
+
+// ============================================================================
+// SUMM-02: Summary mode and submission
+// ============================================================================
+
+describe('SUMM-02: summary mode and submission', () => {
+    test('getActiveMode returns "summary" when only summary is active', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Exec Summary', template: '{comments}', description: 'Exec' });
+        pm.selectPrompt('summary', 'exec-summary');
+
+        expect(pm.getActiveMode()).toBe('summary');
+    });
+
+    test('getActiveMode returns "summary" when summary AND amendment are both active (summary precedence)', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Exec Summary', template: '{comments}', description: 'Exec' });
+        pm.addPrompt('amendment', { name: 'Legal Review', template: '{selection}', description: 'Legal' });
+        pm.selectPrompt('summary', 'exec-summary');
+        pm.selectPrompt('amendment', 'legal-review');
+
+        expect(pm.getActiveMode()).toBe('summary');
+    });
+
+    test('canSubmit returns true when summary is active', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Exec Summary', template: '{comments}', description: 'Exec' });
+        pm.selectPrompt('summary', 'exec-summary');
+
+        expect(pm.canSubmit()).toBe(true);
+    });
+
+    test('canSubmit returns true when summary is active but amendment/comment are not', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Exec Summary', template: '{comments}', description: 'Exec' });
+        pm.selectPrompt('summary', 'exec-summary');
+
+        expect(pm.getActivePrompt('amendment')).toBeNull();
+        expect(pm.getActivePrompt('comment')).toBeNull();
+        expect(pm.canSubmit()).toBe(true);
+    });
+
+    test('canSubmit still returns true for amendment-only (regression check)', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: '{selection}', description: 'Legal' });
+        pm.selectPrompt('amendment', 'legal-review');
+
+        expect(pm.canSubmit()).toBe(true);
+    });
+
+    test('canSubmit still returns true for comment-only (regression check)', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('comment', { name: 'Style Guide', template: '{selection}', description: 'Style' });
+        pm.selectPrompt('comment', 'style-guide');
+
+        expect(pm.canSubmit()).toBe(true);
+    });
+
+    test('canSubmit still returns true for both amendment and comment (regression check)', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: '{selection}', description: 'Legal' });
+        pm.addPrompt('comment', { name: 'Style Guide', template: '{selection}', description: 'Style' });
+        pm.selectPrompt('amendment', 'legal-review');
+        pm.selectPrompt('comment', 'style-guide');
+
+        expect(pm.canSubmit()).toBe(true);
+    });
+
+    test('canSubmit returns false when only context is active (no regression)', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('context', { name: 'US Federal', template: 'US Federal context', description: 'Fed' });
+        pm.selectPrompt('context', 'us-federal');
+
+        expect(pm.canSubmit()).toBe(false);
     });
 });
