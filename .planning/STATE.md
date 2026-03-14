@@ -87,11 +87,13 @@ Recent decisions affecting current work:
 - [Quick-1]: updatePrompt only allows template and description fields; id and name are immutable
 - [Quick-1]: __new__ sentinel value distinguishes "+ New Prompt" from regular prompt IDs in dropdown
 - [Phase 04]: Three-sync batch loading pattern for comment extraction (items -> properties -> ranges)
-- [Phase 04]: Two-phase createSummaryDocument: first Word.run creates+opens, second inserts HTML (avoids WordApiHiddenDocument)
+- [Phase 04]: Single-phase createSummaryDocument: one Word.run creates doc, inserts HTML into newDoc.body, then opens (uses WordApiHiddenDocument 1.3, Desktop-only)
 - [Phase 04]: escapeHtml utility for sanitizing user-generated content before insertHtml
 - [Phase 04]: Annex uses numbered headings (Comment 1, 2...) for visual cross-referencing, not bookmark hyperlinks
 - [Phase 04-01]: Summary mode takes priority over amendment/comment in getActiveMode -- checked first
 - [Phase 04-01]: composeSummaryMessages uses {comments} placeholder with fallback append pattern matching composeMessages {selection} pattern
+- [Quick-2]: Renamed .babelrc to babel.config.json for root-level Babel config (required for node_modules ESM transforms in Jest)
+- [Quick-2]: marked configured with gfm:true, breaks:true for LLM output rendering
 
 ### Pending Todos
 
@@ -107,9 +109,10 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 1 | Save button updates existing prompt, New Prompt dropdown option for creating new prompts | 2026-03-12 | 63eefa3 | [1-save-button-updates-existing-prompt-new-](./quick/1-save-button-updates-existing-prompt-new-/) |
+| 2 | Add marked library to convert LLM markdown to HTML in buildSummaryHtml | 2026-03-14 | 3457b7c | [2-add-marked-library-to-convert-llm-markdo](./quick/2-add-marked-library-to-convert-llm-markdo/) |
 
 ## Session Continuity
 
-Last session: 2026-03-13T14:59:35.845Z
-Stopped at: Completed 04-01-PLAN.md (PromptManager summary category + composeSummaryMessages)
+Last session: 2026-03-14T09:49:29Z
+Stopped at: Completed Quick Task 2 (marked library for markdown-to-HTML conversion)
 Resume file: None
