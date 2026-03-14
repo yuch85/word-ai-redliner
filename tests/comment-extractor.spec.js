@@ -2,7 +2,7 @@
  * Unit tests for src/lib/comment-extractor.js
  * Tests extractAllComments function with mocked Word API.
  */
-const { extractAllComments, extractDocumentText, extractDocumentStructured, estimateTokenCount } = require('../src/lib/comment-extractor.js');
+const { extractAllComments, extractDocumentText, extractDocumentStructured, estimateTokenCount, extractTrackedChanges } = require('../src/lib/comment-extractor.js');
 
 // ============================================================================
 // Word API Mock Setup
@@ -715,5 +715,358 @@ describe('estimateTokenCount', () => {
 
     test('returns correct value for long text (10000 chars -> 2500)', () => {
         expect(estimateTokenCount('y'.repeat(10000))).toBe(2500);
+    });
+});
+
+// ============================================================================
+// extractTrackedChanges Tests
+// ============================================================================
+
+describe('extractTrackedChanges', () => {
+    let tcMockContext;
+
+    /**
+     * Wraps body XML in the pkg:package envelope that body.getOoxml() returns.
+     */
+    function wrapInPkgPackage(bodyXml) {
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage">` +
+            `<pkg:part pkg:name="/word/document.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml">` +
+            `<pkg:xmlData>` +
+            `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+            `<w:body>${bodyXml}</w:body>` +
+            `</w:document>` +
+            `</pkg:xmlData>` +
+            `</pkg:part>` +
+            `</pkg:package>`;
+    }
+
+    /**
+     * Creates raw (non-wrapped) OOXML for testing without pkg:package.
+     */
+    function makeRawOoxml(bodyXml) {
+        return `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+            `<w:body>${bodyXml}</w:body></w:document>`;
+    }
+
+    function setupOoxmlMock(ooxml) {
+        tcMockContext = {
+            document: {
+                body: {
+                    getOoxml: jest.fn(() => ({ value: ooxml }))
+                }
+            },
+            sync: jest.fn(async () => {})
+        };
+        global.Word = {
+            run: jest.fn(async (callback) => callback(tcMockContext))
+        };
+    }
+
+    afterEach(() => {
+        delete global.Word;
+    });
+
+    // --- pkg:package wrapper tests ---
+
+    describe('pkg:package wrapper handling', () => {
+        test('extracts tracked changes from pkg:package wrapped OOXML', async () => {
+            const bodyXml = `<w:p><w:ins w:id="1" w:author="John" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>inserted text</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].type).toBe('Added');
+            expect(result.changes[0].text).toBe('inserted text');
+        });
+
+        test('parses raw OOXML without pkg:package wrapper', async () => {
+            const bodyXml = `<w:p><w:ins w:id="1" w:author="Jane" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>raw insert</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(makeRawOoxml(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].text).toBe('raw insert');
+        });
+    });
+
+    // --- w:proofErr normalization ---
+
+    describe('w:proofErr normalization', () => {
+        test('strips w:proofErr elements before change extraction', async () => {
+            const bodyXml = `<w:p><w:proofErr w:type="spellStart"/>` +
+                `<w:ins w:id="1" w:author="John" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>spelled text</w:t></w:r></w:ins>` +
+                `<w:proofErr w:type="spellEnd"/></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].text).toBe('spelled text');
+        });
+    });
+
+    // --- Insertion tests ---
+
+    describe('insertions', () => {
+        test('parses w:ins and returns Added type with author, date, paragraphText', async () => {
+            const bodyXml = `<w:p><w:r><w:t>Existing </w:t></w:r>` +
+                `<w:ins w:id="1" w:author="Alice" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>new content</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            const change = result.changes[0];
+            expect(change.type).toBe('Added');
+            expect(change.text).toBe('new content');
+            expect(change.author).toBe('Alice');
+            expect(change.date).toBe('2026-03-10T10:00:00Z');
+            expect(change.paragraphText).toContain('Existing');
+        });
+
+        test('handles multiple w:r > w:t within a single w:ins (concatenates)', async () => {
+            const bodyXml = `<w:p><w:ins w:id="1" w:author="Bob" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>hello </w:t></w:r>` +
+                `<w:r><w:t>world</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].text).toBe('hello world');
+        });
+    });
+
+    // --- Deletion tests ---
+
+    describe('deletions', () => {
+        test('parses w:del and returns Deleted type with text from w:delText', async () => {
+            const bodyXml = `<w:p><w:r><w:t>Remaining </w:t></w:r>` +
+                `<w:del w:id="2" w:author="Jane" w:date="2026-03-10T11:00:00Z">` +
+                `<w:r><w:delText>removed text</w:delText></w:r></w:del></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            const change = result.changes[0];
+            expect(change.type).toBe('Deleted');
+            expect(change.text).toBe('removed text');
+            expect(change.author).toBe('Jane');
+            expect(change.date).toBe('2026-03-10T11:00:00Z');
+            expect(change.paragraphText).toContain('Remaining');
+        });
+    });
+
+    // --- Replacement pairing tests ---
+
+    describe('replacement pairing', () => {
+        test('pairs adjacent w:del + w:ins from same author as Replaced', async () => {
+            const bodyXml = `<w:p>` +
+                `<w:del w:id="3" w:author="John" w:date="2026-03-10T12:00:00Z">` +
+                `<w:r><w:delText>old text</w:delText></w:r></w:del>` +
+                `<w:ins w:id="4" w:author="John" w:date="2026-03-10T12:00:00Z">` +
+                `<w:r><w:t>new text</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            const change = result.changes[0];
+            expect(change.type).toBe('Replaced');
+            expect(change.beforeText).toBe('old text');
+            expect(change.afterText).toBe('new text');
+            expect(change.author).toBe('John');
+        });
+
+        test('does NOT pair w:del + w:ins from different authors', async () => {
+            const bodyXml = `<w:p>` +
+                `<w:del w:id="3" w:author="John" w:date="2026-03-10T12:00:00Z">` +
+                `<w:r><w:delText>old text</w:delText></w:r></w:del>` +
+                `<w:ins w:id="4" w:author="Jane" w:date="2026-03-10T12:00:00Z">` +
+                `<w:r><w:t>new text</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(2);
+            expect(result.changes[0].type).toBe('Deleted');
+            expect(result.changes[1].type).toBe('Added');
+        });
+
+        test('does NOT pair w:del + w:ins in different paragraphs', async () => {
+            const bodyXml = `<w:p>` +
+                `<w:del w:id="3" w:author="John" w:date="2026-03-10T12:00:00Z">` +
+                `<w:r><w:delText>old text</w:delText></w:r></w:del></w:p>` +
+                `<w:p><w:ins w:id="4" w:author="John" w:date="2026-03-10T12:00:00Z">` +
+                `<w:r><w:t>new text</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(2);
+            expect(result.changes[0].type).toBe('Deleted');
+            expect(result.changes[1].type).toBe('Added');
+        });
+    });
+
+    // --- Move operation tests ---
+
+    describe('move operations', () => {
+        test('w:moveFrom returns Moved (from) type', async () => {
+            const bodyXml = `<w:p><w:moveFrom w:id="5" w:author="Jane" w:date="2026-03-10T13:00:00Z">` +
+                `<w:r><w:delText>moved text</w:delText></w:r></w:moveFrom></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].type).toBe('Moved (from)');
+            expect(result.changes[0].text).toBe('moved text');
+            expect(result.changes[0].author).toBe('Jane');
+        });
+
+        test('w:moveTo returns Moved (to) type', async () => {
+            const bodyXml = `<w:p><w:moveTo w:id="6" w:author="Jane" w:date="2026-03-10T13:00:00Z">` +
+                `<w:r><w:t>moved text</w:t></w:r></w:moveTo></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].type).toBe('Moved (to)');
+            expect(result.changes[0].text).toBe('moved text');
+        });
+    });
+
+    // --- Table row marker tests ---
+
+    describe('table row markers', () => {
+        test('skips w:ins/w:del inside w:trPr (table row revision markers)', async () => {
+            const bodyXml = `<w:tbl><w:tr>` +
+                `<w:trPr><w:del w:id="301" w:author="Alice" w:date="2026-01-01T00:00:00Z"/></w:trPr>` +
+                `<w:tc><w:p><w:r><w:t>Table cell text</w:t></w:r></w:p></w:tc>` +
+                `</w:tr></w:tbl>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(0);
+        });
+    });
+
+    // --- Text extraction tests ---
+
+    describe('run text extraction', () => {
+        test('handles w:br as newline and w:tab as tab', async () => {
+            const bodyXml = `<w:p><w:ins w:id="1" w:author="John" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>hello</w:t><w:br/><w:tab/><w:t>world</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].text).toBe('hello\n\tworld');
+        });
+
+        test('handles w:cr as newline and w:noBreakHyphen as non-breaking hyphen', async () => {
+            const bodyXml = `<w:p><w:ins w:id="1" w:author="John" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>line1</w:t><w:cr/><w:t>line2</w:t><w:noBreakHyphen/></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].text).toBe('line1\nline2\u2011');
+        });
+    });
+
+    // --- Paragraph context tests ---
+
+    describe('paragraph context', () => {
+        test('excludes deleted text from paragraph context', async () => {
+            const bodyXml = `<w:p><w:r><w:t>Visible text</w:t></w:r>` +
+                `<w:del w:id="2" w:author="Jane" w:date="2026-03-10T11:00:00Z">` +
+                `<w:r><w:delText>hidden text</w:delText></w:r></w:del></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].paragraphText).toBe('Visible text');
+            expect(result.changes[0].paragraphText).not.toContain('hidden');
+        });
+
+        test('includes inserted text in paragraph context', async () => {
+            const bodyXml = `<w:p><w:r><w:t>Base </w:t></w:r>` +
+                `<w:ins w:id="1" w:author="Alice" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>added</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].paragraphText).toContain('Base');
+            expect(result.changes[0].paragraphText).toContain('added');
+        });
+    });
+
+    // --- Namespace fallback tests ---
+
+    describe('namespace fallback', () => {
+        test('uses getElementsByTagName fallback when NS query returns empty', async () => {
+            // Raw prefixed XML (no namespace URI on elements) -- triggers fallback
+            const bodyXml = `<w:p><w:ins w:id="1" w:author="Test" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>fallback text</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            // Should still extract using the fallback
+            expect(result.changes.length).toBeGreaterThanOrEqual(1);
+            expect(result.changes[0].text).toBe('fallback text');
+        });
+    });
+
+    // --- Edge case tests ---
+
+    describe('edge cases', () => {
+        test('returns empty changes array for OOXML with no tracked changes', async () => {
+            const bodyXml = `<w:p><w:r><w:t>Normal text with no changes</w:t></w:r></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toEqual([]);
+        });
+
+        test('returns { changes: [] } when extraction fails (invalid XML)', async () => {
+            setupOoxmlMock('<<<not valid xml>>>');
+
+            const result = await extractTrackedChanges();
+
+            expect(result).toEqual({ changes: [] });
+        });
+
+        test('skips changes with empty/whitespace-only text', async () => {
+            const bodyXml = `<w:p>` +
+                `<w:ins w:id="1" w:author="John" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>   </w:t></w:r></w:ins>` +
+                `<w:ins w:id="2" w:author="John" w:date="2026-03-10T10:00:00Z">` +
+                `<w:r><w:t>valid text</w:t></w:r></w:ins></w:p>`;
+            setupOoxmlMock(wrapInPkgPackage(bodyXml));
+
+            const result = await extractTrackedChanges();
+
+            expect(result.changes).toHaveLength(1);
+            expect(result.changes[0].text).toBe('valid text');
+        });
     });
 });
