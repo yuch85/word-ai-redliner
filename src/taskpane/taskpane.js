@@ -7,7 +7,7 @@ import { sendPrompt, testConnection as llmTestConnection } from '../lib/llm-clie
 import { PromptManager, CATEGORIES } from '../lib/prompt-manager.js';
 import { CommentQueue } from '../lib/comment-queue.js';
 import { fireCommentRequest } from '../lib/comment-request.js';
-import { extractAllComments, extractDocumentText, extractDocumentStructured, estimateTokenCount } from '../lib/comment-extractor.js';
+import { extractAllComments, extractDocumentText, extractDocumentStructured, estimateTokenCount, extractTrackedChanges } from '../lib/comment-extractor.js';
 import { createSummaryDocument, buildSummaryHtml } from '../lib/document-generator.js';
 
 // Global configuration (defaults from env, overridable via UI/localStorage)
@@ -19,6 +19,7 @@ let config = {
         richness: 'plain',
         maxLength: 50000
     },
+    trackedChangesExtraction: false,
     backends: {
         ollama: {
             url: process.env.DEFAULT_OLLAMA_URL || '/ollama',
@@ -124,6 +125,21 @@ function initialize() {
     updateTabDisabledState();
     updateTokenEstimate();
 
+    // Detect and log supported Word API version (diagnostics only)
+    const apiVersions = ['1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1'];
+    let detectedVersion = 'unknown';
+    try {
+        if (typeof Office !== 'undefined' && Office.context && Office.context.requirements) {
+            for (const ver of apiVersions) {
+                if (Office.context.requirements.isSetSupported('WordApi', ver)) {
+                    detectedVersion = ver;
+                    break;
+                }
+            }
+        }
+    } catch (e) { /* detection failed */ }
+    addLog(`Word API version: ${detectedVersion}`, 'info');
+
     // Detect WordApi 1.4 support for comment features
     if (typeof Office !== 'undefined' && Office.context && Office.context.requirements) {
         supportsComments = Office.context.requirements.isSetSupported('WordApi', '1.4');
@@ -188,6 +204,11 @@ function loadSettings() {
             if (!config.docExtraction) {
                 config.docExtraction = { richness: 'plain', maxLength: 50000 };
             }
+
+            // Ensure trackedChangesExtraction default (for configs saved before this feature)
+            if (config.trackedChangesExtraction === undefined) {
+                config.trackedChangesExtraction = false;
+            }
         }
     } catch (e) {
         console.error("Failed to load settings:", e);
@@ -215,6 +236,7 @@ function saveSettings() {
         richness: document.getElementById('docRichnessSelect').value,
         maxLength: parseInt(document.getElementById('docMaxLength').value, 10) || 50000
     };
+    config.trackedChangesExtraction = document.getElementById('trackedChangesExtraction').checked;
 
     try {
         localStorage.setItem('wordAI.config', JSON.stringify(config));
@@ -258,6 +280,11 @@ function updateUIFromConfig() {
     const maxLengthInput = document.getElementById('docMaxLength');
     if (maxLengthInput && config.docExtraction) {
         maxLengthInput.value = config.docExtraction.maxLength || 50000;
+    }
+
+    const trackedChangesCheckbox = document.getElementById('trackedChangesExtraction');
+    if (trackedChangesCheckbox) {
+        trackedChangesCheckbox.checked = !!config.trackedChangesExtraction;
     }
 }
 
@@ -574,6 +601,11 @@ function updateTokenEstimate() {
             if (summaryPrompt.template.includes('{comments}')) {
                 parts.push(`+comments`);
             }
+
+            // If prompt uses {tracked changes} and extraction is enabled, add estimate
+            if (config.trackedChangesExtraction && summaryPrompt.template.includes('{tracked changes}')) {
+                parts.push('+tracked changes');
+            }
         }
     } else {
         // Amendment/comment mode: category prompt
@@ -854,7 +886,51 @@ async function handleSummaryGeneration() {
             summaryOpts.documentText = await extractDocumentStructured({ richness, maxLength });
         }
 
-        // 3. Compose messages using PromptManager
+        // 3. Extract tracked changes if enabled and summary prompt uses {tracked changes} placeholder
+        if (config.trackedChangesExtraction && activeSummaryPrompt && activeSummaryPrompt.template.includes('{tracked changes}')) {
+            addLog('Extracting tracked changes (OOXML parsing)...', 'info');
+            const tcResult = await extractTrackedChanges();
+            addLog(`Tracked changes extracted (${tcResult.changes.length} change(s))`, 'info');
+
+            // Format tracked changes for the prompt -- show before/after with author prominently
+            let tcText = '';
+            if (tcResult.changes.length > 0) {
+                tcText = tcResult.changes.map((c, i) => {
+                    const num = i + 1;
+                    const author = c.author || 'Unknown';
+                    const date = c.date || '';
+                    const dateStr = date ? ` on ${date}` : '';
+
+                    if (c.type === 'Replaced') {
+                        return `[Change ${num}] REPLACED by ${author}${dateStr}:\n` +
+                               `  BEFORE: "${c.beforeText}"\n` +
+                               `  AFTER:  "${c.afterText}"` +
+                               (c.paragraphText ? `\n  IN CLAUSE: "${c.paragraphText}"` : '');
+                    } else if (c.type === 'Deleted') {
+                        return `[Change ${num}] DELETED by ${author}${dateStr}:\n` +
+                               `  REMOVED: "${c.text}"` +
+                               (c.paragraphText ? `\n  IN CLAUSE: "${c.paragraphText}"` : '');
+                    } else if (c.type === 'Added') {
+                        return `[Change ${num}] ADDED by ${author}${dateStr}:\n` +
+                               `  INSERTED: "${c.text}"` +
+                               (c.paragraphText ? `\n  IN CLAUSE: "${c.paragraphText}"` : '');
+                    } else if (c.type.startsWith('Moved')) {
+                        return `[Change ${num}] ${c.type.toUpperCase()} by ${author}${dateStr}:\n` +
+                               `  TEXT: "${c.text}"` +
+                               (c.paragraphText ? `\n  IN CLAUSE: "${c.paragraphText}"` : '');
+                    }
+                    return `[Change ${num}] ${c.type} by ${author}${dateStr}: "${c.text}"`;
+                }).join('\n\n');
+            }
+
+            if (tcText) {
+                summaryOpts.trackedChangesText = tcText;
+            } else if (tcResult.changes.length === 0) {
+                summaryOpts.trackedChangesText = '(No tracked changes found in document)';
+            }
+        }
+
+        // 4. Compose messages using PromptManager
         const messages = promptManager.composeSummaryMessages(comments, summaryOpts);
 
         if (messages.length === 0) {
