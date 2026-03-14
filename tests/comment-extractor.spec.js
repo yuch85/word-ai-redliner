@@ -2,7 +2,14 @@
  * Unit tests for src/lib/comment-extractor.js
  * Tests extractAllComments function with mocked Word API.
  */
+const { JSDOM } = require('jsdom');
 const { extractAllComments, extractDocumentText, extractDocumentStructured, estimateTokenCount, extractTrackedChanges } = require('../src/lib/comment-extractor.js');
+
+// Provide DOMParser for OOXML tests (node test environment lacks it)
+if (typeof globalThis.DOMParser === 'undefined') {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+}
 
 // ============================================================================
 // Word API Mock Setup

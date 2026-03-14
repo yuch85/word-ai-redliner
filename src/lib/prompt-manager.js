@@ -365,6 +365,11 @@ export class PromptManager {
                 content = content.replace(/{whole document}/g, options.documentText);
             }
 
+            // Replace {tracked changes} placeholder
+            if (content.includes('{tracked changes}') && options.trackedChangesText !== undefined) {
+                content = content.replace(/{tracked changes}/g, options.trackedChangesText);
+            }
+
             messages.push({ role: 'user', content });
         }
 

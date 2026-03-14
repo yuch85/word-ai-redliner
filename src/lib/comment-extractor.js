@@ -14,6 +14,232 @@ const MAX_ASSOCIATED_TEXT_LENGTH = 500;
 const MAX_DOCUMENT_TEXT_LENGTH = 50000;
 const DEFAULT_MAX_LENGTH = 50000;
 
+// OOXML namespace constants
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const PKG_NS = 'http://schemas.microsoft.com/office/2006/xmlPackage';
+
+/**
+ * Query OOXML elements with namespace-aware fallback.
+ * Tries getElementsByTagNameNS first, falls back to prefix-based getElementsByTagName.
+ * Pattern from docx-redline-js: browser DOMParser namespace resolution is inconsistent.
+ */
+function queryElements(parent, localName) {
+    let elements = parent.getElementsByTagNameNS(W_NS, localName);
+    if (elements.length > 0) return Array.from(elements);
+    elements = parent.getElementsByTagName('w:' + localName);
+    return Array.from(elements);
+}
+
+/**
+ * Extracts the document body from a pkg:package wrapper.
+ * body.getOoxml() returns OOXML wrapped in pkg:package; we need the inner document XML.
+ * Pattern from adeu: the pkg:part with name="/word/document.xml" contains the actual content.
+ *
+ * @param {Document} doc - Parsed XML document
+ * @returns {Element} - The w:body element or the document element if no wrapper found
+ */
+function extractDocumentBody(doc) {
+    // Try pkg:package wrapper first
+    let xmlDataElements = doc.getElementsByTagNameNS(PKG_NS, 'xmlData');
+    if (xmlDataElements.length === 0) {
+        xmlDataElements = doc.getElementsByTagName('pkg:xmlData');
+    }
+
+    if (xmlDataElements.length > 0) {
+        // Find the xmlData containing w:document (could be multiple pkg:parts)
+        for (const xmlData of Array.from(xmlDataElements)) {
+            const bodies = queryElements(xmlData, 'body');
+            if (bodies.length > 0) return bodies[0];
+        }
+    }
+
+    // No pkg:package wrapper -- try direct w:body
+    const bodies = queryElements(doc, 'body');
+    if (bodies.length > 0) return bodies[0];
+
+    // Fallback to document element
+    return doc.documentElement;
+}
+
+/**
+ * Removes w:proofErr elements from the DOM before processing.
+ * Pattern from adeu: proofing error markers can interfere with text extraction.
+ */
+function removeProofErrors(parent) {
+    const proofErrors = queryElements(parent, 'proofErr');
+    for (const el of proofErrors) {
+        el.parentNode.removeChild(el);
+    }
+}
+
+function getChangeAuthor(element) {
+    return element.getAttributeNS(W_NS, 'author')
+        || element.getAttribute('w:author')
+        || element.getAttribute('author')
+        || null;
+}
+
+function getChangeDate(element) {
+    return element.getAttributeNS(W_NS, 'date')
+        || element.getAttribute('w:date')
+        || element.getAttribute('date')
+        || null;
+}
+
+/**
+ * Extract text from a run, handling w:t, w:delText, w:br, w:tab, w:cr, w:noBreakHyphen.
+ * Pattern from docx-redline-js ingestion-export.js readRunText().
+ */
+function readRunText(run, useDelText = false) {
+    let text = '';
+    for (const child of Array.from(run.childNodes || [])) {
+        if (child.nodeType !== 1) continue;
+        const name = child.localName;
+        if (name === 't' && !useDelText) text += child.textContent || '';
+        else if (name === 'delText' && useDelText) text += child.textContent || '';
+        else if (name === 'tab') text += '\t';
+        else if (name === 'br' || name === 'cr') text += '\n';
+        else if (name === 'noBreakHyphen') text += '\u2011';
+    }
+    return text;
+}
+
+/** Extract text from all runs within a revision element. */
+function extractRevisionText(element, useDelText = false) {
+    const runs = queryElements(element, 'r');
+    let text = '';
+    for (const run of runs) text += readRunText(run, useDelText);
+    // Fallback: if no runs found but delText exists directly
+    if (!text && useDelText) {
+        for (const dt of queryElements(element, 'delText')) text += dt.textContent || '';
+    }
+    return text;
+}
+
+/**
+ * Get containing paragraph's current text for clause context.
+ * Skips runs inside w:del or w:moveFrom containers.
+ * Pattern from docx-redline-js ingestion-export.js.
+ */
+function getContainingParagraphText(changeElement) {
+    let node = changeElement;
+    while (node && node.localName !== 'p') node = node.parentNode;
+    if (!node) return '';
+    const textNodes = queryElements(node, 't');
+    let text = '';
+    for (const t of textNodes) {
+        let parent = t.parentNode, excluded = false;
+        while (parent && parent !== node) {
+            if (parent.localName === 'del' || parent.localName === 'moveFrom') { excluded = true; break; }
+            parent = parent.parentNode;
+        }
+        if (!excluded) text += t.textContent || '';
+    }
+    return text.trim();
+}
+
+function getNextElementSibling(element) {
+    let sibling = element.nextSibling;
+    while (sibling && sibling.nodeType !== 1) sibling = sibling.nextSibling;
+    return sibling;
+}
+
+/** Skip w:ins/w:del inside w:trPr (table row property markers, not content). */
+function isTableRowRevisionMarker(element) {
+    const parent = element.parentNode;
+    return parent && parent.localName === 'trPr';
+}
+
+/**
+ * Parses OOXML for tracked changes using browser DOMParser.
+ * Handles: pkg:package wrapper, w:proofErr normalization,
+ * w:ins, w:del, w:moveFrom, w:moveTo.
+ * Pairs adjacent w:del + w:ins (by DOM sibling, same author) as replacements.
+ * Extracts containing paragraph text for clause context.
+ * Patterns informed by docx-redline-js and adeu reference libraries.
+ */
+function parseOoxmlTrackedChanges(ooxml) {
+    const changes = [];
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(ooxml, 'application/xml');
+
+        // Check for parse errors
+        const parseError = doc.querySelector('parsererror');
+        if (parseError) {
+            console.error('XML parse error in tracked changes OOXML');
+            return changes;
+        }
+
+        // Extract document body from pkg:package wrapper (if present)
+        const body = extractDocumentBody(doc);
+
+        // Normalize: remove w:proofErr elements before processing
+        removeProofErrors(body);
+
+        // Process deletions first, pairing with adjacent insertions via DOM siblings
+        const deletions = queryElements(body, 'del');
+        const pairedInsertions = new Set();
+
+        for (const del of deletions) {
+            if (isTableRowRevisionMarker(del)) continue;
+            const author = getChangeAuthor(del);
+            const date = getChangeDate(del);
+            const delText = extractRevisionText(del, true);
+            if (!delText.trim()) continue;
+            const paragraphText = getContainingParagraphText(del);
+
+            // DOM-based pairing: check if next element sibling is w:ins from same author
+            const nextSibling = getNextElementSibling(del);
+            if (nextSibling && nextSibling.localName === 'ins' &&
+                getChangeAuthor(nextSibling) === author) {
+                const insText = extractRevisionText(nextSibling, false);
+                if (insText.trim()) {
+                    pairedInsertions.add(nextSibling);
+                    changes.push({
+                        type: 'Replaced', beforeText: delText, afterText: insText,
+                        text: insText, author, date, paragraphText
+                    });
+                    continue;
+                }
+            }
+            changes.push({ type: 'Deleted', text: delText, author, date, paragraphText });
+        }
+
+        // Process unpaired insertions
+        for (const ins of queryElements(body, 'ins')) {
+            if (pairedInsertions.has(ins) || isTableRowRevisionMarker(ins)) continue;
+            const insText = extractRevisionText(ins, false);
+            if (!insText.trim()) continue;
+            changes.push({
+                type: 'Added', text: insText, author: getChangeAuthor(ins),
+                date: getChangeDate(ins), paragraphText: getContainingParagraphText(ins)
+            });
+        }
+
+        // Process move operations
+        for (const mf of queryElements(body, 'moveFrom')) {
+            const text = extractRevisionText(mf, true) || extractRevisionText(mf, false);
+            if (!text.trim()) continue;
+            changes.push({
+                type: 'Moved (from)', text, author: getChangeAuthor(mf),
+                date: getChangeDate(mf), paragraphText: getContainingParagraphText(mf)
+            });
+        }
+        for (const mt of queryElements(body, 'moveTo')) {
+            const text = extractRevisionText(mt, false);
+            if (!text.trim()) continue;
+            changes.push({
+                type: 'Moved (to)', text, author: getChangeAuthor(mt),
+                date: getChangeDate(mt), paragraphText: getContainingParagraphText(mt)
+            });
+        }
+    } catch (e) {
+        console.error('Failed to parse OOXML for tracked changes:', e);
+    }
+    return changes;
+}
+
 /**
  * Extracts all comments from the active document.
  * Returns structured data suitable for LLM prompt composition.
@@ -206,4 +432,40 @@ export async function extractDocumentStructured(options = {}) {
     }
 
     return result;
+}
+
+/**
+ * Extracts tracked changes from the active document using OOXML parsing.
+ *
+ * Uses body.getOoxml() to get the document's OOXML representation, then
+ * parses it with the browser's DOMParser to extract revision marks:
+ * w:ins, w:del, w:moveFrom, w:moveTo.
+ *
+ * This approach works on ALL Office versions (WordApi 1.1 minimum) and
+ * provides richer data than higher-level Word JS API alternatives:
+ * - Before AND after text for replacements (paired w:del + w:ins)
+ * - Move detection (w:moveFrom / w:moveTo)
+ * - Author + date on every change
+ * - Paragraph context
+ *
+ * Handles the pkg:package wrapper that body.getOoxml() returns.
+ * Normalizes by removing w:proofErr elements before extraction.
+ *
+ * @returns {Promise<{changes: Array<{type: string, text: string, author: string|null, date: string|null, paragraphText: string}>}>}
+ */
+export async function extractTrackedChanges() {
+    try {
+        let ooxml = '';
+        await Word.run(async (context) => {
+            const body = context.document.body;
+            const result = body.getOoxml();
+            await context.sync();
+            ooxml = result.value;
+        });
+        const changes = parseOoxmlTrackedChanges(ooxml);
+        return { changes };
+    } catch (e) {
+        console.error('Failed to extract tracked changes:', e);
+        return { changes: [] };
+    }
 }
