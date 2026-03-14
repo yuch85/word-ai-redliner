@@ -95,6 +95,10 @@ Recent decisions affecting current work:
 - [Quick-2]: Renamed .babelrc to babel.config.json for root-level Babel config (required for node_modules ESM transforms in Jest)
 - [Quick-2]: marked configured with gfm:true, breaks:true for LLM output rendering
 
+### Roadmap Evolution
+
+- Plan 04-04 added: Structured document extraction for {whole document} placeholder with configurable richness (headings, list numbering, tracked changes, inline comments)
+
 ### Pending Todos
 
 None yet.
