@@ -91,7 +91,7 @@ Plans:
 - [ ] 04-01-PLAN.md — Extend PromptManager with summary category, mode logic, and composeSummaryMessages
 - [ ] 04-02-PLAN.md — Comment extractor and document generator modules with tests
 - [ ] 04-03-PLAN.md — UI wiring: Summary tab, mode switching, button relabel, and summary workflow integration
-- [ ] 04-04-PLAN.md — Structured document extraction for {whole document} placeholder with configurable richness levels and max length
+- [ ] 04-04-PLAN.md — Structured document extraction with richness levels, max length, and live token estimation display
 
 ## Progress
 
