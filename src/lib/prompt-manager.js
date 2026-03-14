@@ -326,12 +326,15 @@ export class PromptManager {
      *
      * If a Context prompt is active, it becomes the system message.
      * The active Summary prompt becomes the user message with {comments}
-     * placeholder replaced by structured comment data.
+     * placeholder replaced by structured comment data, and {whole document}
+     * placeholder replaced by the full document body text.
      *
      * @param {Array<{index: number, commentText: string, associatedText: string, author: string, date: string, resolved: boolean}>} extractedComments
+     * @param {object} [options] - Optional parameters
+     * @param {string} [options.documentText] - Full document body text for {whole document} placeholder
      * @returns {Array<{role: string, content: string}>} Messages array for chat completions
      */
-    composeSummaryMessages(extractedComments) {
+    composeSummaryMessages(extractedComments, options = {}) {
         const messages = [];
 
         // System message from context (if active)
@@ -345,15 +348,23 @@ export class PromptManager {
             `[Comment ${c.index}] by ${c.author} on "${c.associatedText}":\n"${c.commentText}"`
         ).join('\n\n');
 
-        // User message from summary prompt with {comments} replacement
+        // User message from summary prompt with placeholder replacement
         const summaryPrompt = this.getActivePrompt('summary');
         if (summaryPrompt) {
             let content = summaryPrompt.template;
+
+            // Replace {comments} placeholder
             if (content.includes('{comments}')) {
                 content = content.replace(/{comments}/g, commentData);
             } else {
                 content = content + '\n\n' + commentData;
             }
+
+            // Replace {whole document} placeholder
+            if (content.includes('{whole document}') && options.documentText !== undefined) {
+                content = content.replace(/{whole document}/g, options.documentText);
+            }
+
             messages.push({ role: 'user', content });
         }
 

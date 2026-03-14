@@ -7,7 +7,7 @@ import { sendPrompt, testConnection as llmTestConnection } from '../lib/llm-clie
 import { PromptManager, CATEGORIES } from '../lib/prompt-manager.js';
 import { CommentQueue } from '../lib/comment-queue.js';
 import { fireCommentRequest } from '../lib/comment-request.js';
-import { extractAllComments } from '../lib/comment-extractor.js';
+import { extractAllComments, extractDocumentText } from '../lib/comment-extractor.js';
 import { createSummaryDocument, buildSummaryHtml } from '../lib/document-generator.js';
 
 // Global configuration (defaults from env, overridable via UI/localStorage)
@@ -733,15 +733,23 @@ async function handleSummaryGeneration() {
 
         addLog(`Found ${comments.length} comment(s). Sending to LLM...`, 'info');
 
-        // 2. Compose messages using PromptManager
-        const messages = promptManager.composeSummaryMessages(comments);
+        // 2. Extract document text if summary prompt uses {whole document} placeholder
+        const summaryOpts = {};
+        const activeSummaryPrompt = promptManager.getActivePrompt('summary');
+        if (activeSummaryPrompt && activeSummaryPrompt.template.includes('{whole document}')) {
+            addLog('Extracting document text...', 'info');
+            summaryOpts.documentText = await extractDocumentText();
+        }
+
+        // 3. Compose messages using PromptManager
+        const messages = promptManager.composeSummaryMessages(comments, summaryOpts);
 
         if (messages.length === 0) {
             addLog('No summary prompt active. Select a Summary prompt first.', 'warning');
             return;
         }
 
-        // 3. Send to LLM (flatten messages to single prompt for sendPrompt compatibility)
+        // 4. Send to LLM (flatten messages to single prompt for sendPrompt compatibility)
         const backendConfig = getActiveBackendConfig();
         let fullPrompt;
         if (messages.length >= 2 && messages[0].role === 'system') {
@@ -753,7 +761,7 @@ async function handleSummaryGeneration() {
         const llmResponse = await sendPrompt(backendConfig, fullPrompt, addLog);
         addLog(`Summary received (${llmResponse.length} chars). Creating document...`, 'info');
 
-        // 4. Build HTML and create document
+        // 5. Build HTML and create document
         // Get document title for the summary doc
         let docTitle = 'Comment Summary';
         try {

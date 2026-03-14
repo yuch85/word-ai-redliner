@@ -282,3 +282,106 @@ describe('SUMM-05: composeSummaryMessages', () => {
         });
     });
 });
+
+// ============================================================================
+// {whole document} placeholder in composeSummaryMessages
+// ============================================================================
+
+describe('composeSummaryMessages: {whole document} placeholder', () => {
+    const sampleComments = [
+        { index: 1, commentText: 'Needs revision', associatedText: 'clause one', author: 'Alice', date: '2026-03-01', resolved: false }
+    ];
+
+    const sampleDocText = 'This is the full document body text for the contract.';
+
+    test('replaces {whole document} placeholder with documentText when provided', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Full Review', template: 'Document:\n{whole document}\n\nComments:\n{comments}', description: '' });
+        pm.selectPrompt('summary', 'full-review');
+
+        const messages = pm.composeSummaryMessages(sampleComments, { documentText: sampleDocText });
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0].content).toContain(sampleDocText);
+        expect(messages[0].content).not.toContain('{whole document}');
+        expect(messages[0].content).toContain('[Comment 1] by Alice');
+    });
+
+    test('leaves {whole document} placeholder unchanged when documentText not provided', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Full Review', template: 'Document:\n{whole document}\n\nComments:\n{comments}', description: '' });
+        pm.selectPrompt('summary', 'full-review');
+
+        const messages = pm.composeSummaryMessages(sampleComments);
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0].content).toContain('{whole document}');
+    });
+
+    test('replaces multiple {whole document} occurrences', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Double', template: 'First: {whole document}\nSecond: {whole document}', description: '' });
+        pm.selectPrompt('summary', 'double');
+
+        const messages = pm.composeSummaryMessages(sampleComments, { documentText: 'doc text' });
+
+        const content = messages[0].content;
+        expect(content).not.toContain('{whole document}');
+        expect(content).toContain('First: doc text');
+        expect(content).toContain('Second: doc text');
+    });
+
+    test('works with both {comments} and {whole document} placeholders together', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', {
+            name: 'Combined',
+            template: 'Review this document:\n{whole document}\n\nBased on these comments:\n{comments}\n\nProvide a summary.',
+            description: ''
+        });
+        pm.selectPrompt('summary', 'combined');
+
+        const messages = pm.composeSummaryMessages(sampleComments, { documentText: sampleDocText });
+
+        const content = messages[0].content;
+        expect(content).toContain(sampleDocText);
+        expect(content).toContain('[Comment 1] by Alice on "clause one"');
+        expect(content).not.toContain('{whole document}');
+        expect(content).not.toContain('{comments}');
+    });
+
+    test('works when template has {whole document} but no {comments} placeholder', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Doc Only', template: 'Summarize this document:\n{whole document}', description: '' });
+        pm.selectPrompt('summary', 'doc-only');
+
+        const messages = pm.composeSummaryMessages(sampleComments, { documentText: sampleDocText });
+
+        const content = messages[0].content;
+        expect(content).toContain(sampleDocText);
+        expect(content).not.toContain('{whole document}');
+        // Comments should be appended since no {comments} placeholder
+        expect(content).toContain('[Comment 1] by Alice');
+    });
+
+    test('backward compatible: no options parameter still works', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Simple', template: '{comments}', description: '' });
+        pm.selectPrompt('summary', 'simple');
+
+        const messages = pm.composeSummaryMessages(sampleComments);
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0].content).toContain('[Comment 1] by Alice');
+    });
+
+    test('handles empty documentText string', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Empty Doc', template: 'Document: {whole document}', description: '' });
+        pm.selectPrompt('summary', 'empty-doc');
+
+        const messages = pm.composeSummaryMessages(sampleComments, { documentText: '' });
+
+        expect(messages[0].content).toBe('Document: \n\n[Comment 1] by Alice on "clause one":\n"Needs revision"');
+        expect(messages[0].content).not.toContain('{whole document}');
+    });
+});

@@ -11,6 +11,7 @@
  */
 
 const MAX_ASSOCIATED_TEXT_LENGTH = 500;
+const MAX_DOCUMENT_TEXT_LENGTH = 50000;
 
 /**
  * Extracts all comments from the active document.
@@ -65,4 +66,25 @@ export async function extractAllComments() {
         }
     });
     return comments;
+}
+
+/**
+ * Extracts the full document body as plain text.
+ * Returns the text content of the active document's body, truncated
+ * to MAX_DOCUMENT_TEXT_LENGTH characters if necessary.
+ *
+ * @returns {Promise<string>} The document body text
+ */
+export async function extractDocumentText() {
+    let text = '';
+    await Word.run(async (context) => {
+        const body = context.document.body;
+        body.load('text');
+        await context.sync();
+        text = body.text || '';
+        if (text.length > MAX_DOCUMENT_TEXT_LENGTH) {
+            text = text.substring(0, MAX_DOCUMENT_TEXT_LENGTH) + '...';
+        }
+    });
+    return text;
 }
