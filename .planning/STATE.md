@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md (PromptManager summary category + composeSummaryMessages)
-last_updated: "2026-03-13T14:59:50.345Z"
-last_activity: 2026-03-13 -- Plan 04-02 executed (comment-extractor + document-generator modules)
+stopped_at: Completed 04-04-PLAN.md (structured document extraction and token estimation)
+last_updated: "2026-03-14T16:55:00.215Z"
+last_activity: "2026-03-14 - Completed plan 04-04: Structured document extraction and token estimation"
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 11
-  completed_plans: 9
+  total_plans: 13
+  completed_plans: 11
   percent: 73
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 4 of 4 (Document Comment Summary)
-Plan: 2 of 3 in current phase
+Plan: 5 of 5 in current phase
 Status: In Progress
-Last activity: 2026-03-14 - Completed quick task 2: Add marked library to convert LLM markdown to HTML in buildSummaryHtml
+Last activity: 2026-03-14 - Completed plan 04-04: Structured document extraction and token estimation
 
 Progress: [███████░░░] 73%
 
@@ -55,6 +55,7 @@ Progress: [███████░░░] 73%
 | Phase 03 P01 | 4 | 2 tasks | 3 files |
 | Phase 04 P02 | 4 | 2 tasks | 4 files |
 | Phase 04 P01 | 5 | 2 tasks | 3 files |
+| Phase 04 P04 | 5 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ Recent decisions affecting current work:
 - [Phase 04-01]: composeSummaryMessages uses {comments} placeholder with fallback append pattern matching composeMessages {selection} pattern
 - [Quick-2]: Renamed .babelrc to babel.config.json for root-level Babel config (required for node_modules ESM transforms in Jest)
 - [Quick-2]: marked configured with gfm:true, breaks:true for LLM output rendering
+- [Phase 04]: Paragraph iteration with styleBuiltIn/isListItem for structured extraction (not getHtml)
+- [Phase 04]: Token estimation uses Math.ceil(text.length / 4) heuristic (~80-85% accuracy, sufficient for informational display)
+- [Phase 04]: docExtraction config (richness, maxLength) persists in localStorage via wordAI.config
 
 ### Roadmap Evolution
 
@@ -117,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T09:49:29Z
-Stopped at: Completed Quick Task 2 (marked library for markdown-to-HTML conversion)
+Last session: 2026-03-14T16:55:00.214Z
+Stopped at: Completed 04-04-PLAN.md (structured document extraction and token estimation)
 Resume file: None
