@@ -385,3 +385,88 @@ describe('composeSummaryMessages: {whole document} placeholder', () => {
         expect(messages[0].content).not.toContain('{whole document}');
     });
 });
+
+// ============================================================================
+// {tracked changes} placeholder in composeSummaryMessages
+// ============================================================================
+
+describe('composeSummaryMessages: {tracked changes} placeholder', () => {
+    const sampleComments = [
+        { index: 1, commentText: 'Needs revision', associatedText: 'clause one', author: 'Alice', date: '2026-03-01', resolved: false }
+    ];
+
+    const sampleTrackedChangesText = '[Change 1] REPLACED by John on 2026-03-10:\n  BEFORE: "old"\n  AFTER: "new"';
+
+    test('replaces {tracked changes} placeholder with trackedChangesText when both present', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', {
+            name: 'TC Review',
+            template: 'Comments:\n{comments}\n\nTracked Changes:\n{tracked changes}',
+            description: ''
+        });
+        pm.selectPrompt('summary', 'tc-review');
+
+        const messages = pm.composeSummaryMessages(sampleComments, { trackedChangesText: sampleTrackedChangesText });
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0].content).toContain(sampleTrackedChangesText);
+        expect(messages[0].content).not.toContain('{tracked changes}');
+        expect(messages[0].content).toContain('[Comment 1] by Alice');
+    });
+
+    test('does NOT append tracked changes text when template lacks {tracked changes} placeholder', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', {
+            name: 'No TC Placeholder',
+            template: 'Just comments:\n{comments}',
+            description: ''
+        });
+        pm.selectPrompt('summary', 'no-tc-placeholder');
+
+        const messages = pm.composeSummaryMessages(sampleComments, { trackedChangesText: sampleTrackedChangesText });
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0].content).not.toContain(sampleTrackedChangesText);
+        expect(messages[0].content).toContain('[Comment 1] by Alice');
+    });
+
+    test('handles template with {comments}, {whole document}, and {tracked changes} simultaneously', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', {
+            name: 'Full',
+            template: 'Doc:\n{whole document}\n\nComments:\n{comments}\n\nChanges:\n{tracked changes}',
+            description: ''
+        });
+        pm.selectPrompt('summary', 'full');
+
+        const messages = pm.composeSummaryMessages(sampleComments, {
+            documentText: 'full doc text',
+            trackedChangesText: sampleTrackedChangesText
+        });
+
+        const content = messages[0].content;
+        expect(content).toContain('full doc text');
+        expect(content).toContain('[Comment 1] by Alice');
+        expect(content).toContain(sampleTrackedChangesText);
+        expect(content).not.toContain('{whole document}');
+        expect(content).not.toContain('{comments}');
+        expect(content).not.toContain('{tracked changes}');
+    });
+
+    test('replaces multiple {tracked changes} occurrences', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', {
+            name: 'Double TC',
+            template: 'First: {tracked changes}\nSecond: {tracked changes}',
+            description: ''
+        });
+        pm.selectPrompt('summary', 'double-tc');
+
+        const messages = pm.composeSummaryMessages(sampleComments, { trackedChangesText: 'TC_DATA' });
+
+        const content = messages[0].content;
+        expect(content).not.toContain('{tracked changes}');
+        expect(content).toContain('First: TC_DATA');
+        expect(content).toContain('Second: TC_DATA');
+    });
+});
