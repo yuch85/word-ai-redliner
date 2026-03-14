@@ -117,47 +117,78 @@ describe('buildSummaryHtml', () => {
 });
 
 // ============================================================================
+// buildSummaryHtml markdown conversion Tests
+// ============================================================================
+
+describe('buildSummaryHtml markdown conversion', () => {
+    const sampleComments = [
+        {
+            index: 1,
+            commentText: 'Test comment',
+            associatedText: 'Test text',
+            author: 'Tester'
+        }
+    ];
+
+    test('converts markdown bold to <strong> HTML tags', () => {
+        const html = buildSummaryHtml('**bold** text', sampleComments);
+        expect(html).toContain('<strong>bold</strong>');
+    });
+
+    test('converts markdown heading to <h1> HTML tag', () => {
+        const html = buildSummaryHtml('# Heading\n\nParagraph', sampleComments);
+        expect(html).toContain('<h1>Heading</h1>');
+        expect(html).toContain('<p>Paragraph</p>');
+    });
+
+    test('converts markdown list to <ul>/<li> HTML elements', () => {
+        const html = buildSummaryHtml('- item 1\n- item 2', sampleComments);
+        expect(html).toContain('<ul>');
+        expect(html).toContain('<li>item 1</li>');
+        expect(html).toContain('<li>item 2</li>');
+    });
+
+    test('wraps plain text in <p> tag (marked default behavior)', () => {
+        const html = buildSummaryHtml('Just plain text', sampleComments);
+        expect(html).toContain('<p>Just plain text</p>');
+    });
+
+    test('passes through already-valid HTML without double-escaping', () => {
+        const html = buildSummaryHtml('<p>Already HTML</p>', sampleComments);
+        expect(html).toContain('<p>Already HTML</p>');
+    });
+
+    test('existing tests still pass -- HTML summary text passes through marked unchanged', () => {
+        const summaryText = '<p>This is the LLM-generated summary with <strong>findings</strong>.</p>';
+        const html = buildSummaryHtml(summaryText, sampleComments);
+        expect(html).toContain(summaryText);
+    });
+});
+
+// ============================================================================
 // createSummaryDocument Tests (mock Word API)
 // ============================================================================
 
 describe('createSummaryDocument', () => {
     let mockNewDoc;
-    let mockBody;
-    let wordRunCalls;
+    let mockContext;
 
     beforeEach(() => {
-        wordRunCalls = [];
         mockNewDoc = {
+            body: {
+                insertHtml: jest.fn()
+            },
             open: jest.fn()
-        };
-        mockBody = {
-            insertHtml: jest.fn()
         };
 
         global.Word = {
             run: jest.fn(async (callback) => {
-                const callIndex = wordRunCalls.length;
-                let mockContext;
-
-                if (callIndex === 0) {
-                    // Phase 1: Create and open document
-                    mockContext = {
-                        application: {
-                            createDocument: jest.fn(() => mockNewDoc)
-                        },
-                        sync: jest.fn()
-                    };
-                } else {
-                    // Phase 2: Insert content
-                    mockContext = {
-                        document: {
-                            body: mockBody
-                        },
-                        sync: jest.fn()
-                    };
-                }
-
-                wordRunCalls.push(mockContext);
+                mockContext = {
+                    application: {
+                        createDocument: jest.fn(() => mockNewDoc)
+                    },
+                    sync: jest.fn()
+                };
                 return callback(mockContext);
             }),
             InsertLocation: { end: 'End' }
@@ -170,25 +201,39 @@ describe('createSummaryDocument', () => {
 
     test('calls context.application.createDocument()', async () => {
         await createSummaryDocument('<p>Content</p>');
-        expect(wordRunCalls[0].application.createDocument).toHaveBeenCalled();
+        expect(mockContext.application.createDocument).toHaveBeenCalled();
     });
 
-    test('calls newDoc.open()', async () => {
+    test('inserts HTML into newDoc.body (not context.document.body)', async () => {
+        const htmlContent = '<h1>Summary</h1><p>Analysis text</p>';
+        await createSummaryDocument(htmlContent);
+        expect(mockNewDoc.body.insertHtml).toHaveBeenCalledWith(htmlContent, 'End');
+    });
+
+    test('calls newDoc.open() after inserting content', async () => {
         await createSummaryDocument('<p>Content</p>');
         expect(mockNewDoc.open).toHaveBeenCalled();
     });
 
-    test('second Word.run calls body.insertHtml with the HTML content', async () => {
-        const htmlContent = '<h1>Summary</h1><p>Analysis text</p>';
-        await createSummaryDocument(htmlContent);
-
-        expect(wordRunCalls).toHaveLength(2);
-        expect(mockBody.insertHtml).toHaveBeenCalledWith(htmlContent, 'End');
+    test('uses single Word.run (not two separate calls)', async () => {
+        await createSummaryDocument('<p>Content</p>');
+        expect(Word.run).toHaveBeenCalledTimes(1);
     });
 
     test('insertHtml uses Word.InsertLocation.end', async () => {
         await createSummaryDocument('<p>Content</p>');
-        expect(mockBody.insertHtml).toHaveBeenCalledWith('<p>Content</p>', 'End');
+        expect(mockNewDoc.body.insertHtml).toHaveBeenCalledWith('<p>Content</p>', 'End');
+    });
+
+    test('inserts content before opening (content goes to new doc, not original)', async () => {
+        // Track call order to verify insertHtml happens before open
+        const callOrder = [];
+        mockNewDoc.body.insertHtml = jest.fn(() => callOrder.push('insertHtml'));
+        mockNewDoc.open = jest.fn(() => callOrder.push('open'));
+
+        await createSummaryDocument('<p>Content</p>');
+
+        expect(callOrder).toEqual(['insertHtml', 'open']);
     });
 
     test('calls log callback on success when provided', async () => {
