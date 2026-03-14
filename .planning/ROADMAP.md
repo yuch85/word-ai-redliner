@@ -92,7 +92,7 @@ Plans:
 - [ ] 04-02-PLAN.md — Comment extractor and document generator modules with tests
 - [ ] 04-03-PLAN.md — UI wiring: Summary tab, mode switching, button relabel, and summary workflow integration
 - [ ] 04-04-PLAN.md — Structured document extraction with richness levels, max length, and live token estimation display
-- [ ] 04-05-PLAN.md — Tracked changes extraction with cascading three-tier API detection and {tracked changes} placeholder
+- [ ] 04-05-PLAN.md — Tracked changes extraction via OOXML-only parsing (body.getOoxml + DOMParser) and {tracked changes} placeholder
 
 ## Progress
 
