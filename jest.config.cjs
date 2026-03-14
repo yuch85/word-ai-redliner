@@ -3,6 +3,9 @@ module.exports = {
   transform: {
     '^.+\\.js$': 'babel-jest'
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!marked/)'
+  ],
   moduleFileExtensions: ['js'],
   testMatch: ['**/tests/**/*.spec.js'],
   collectCoverageFrom: [
