@@ -7,7 +7,7 @@ import { sendPrompt, testConnection as llmTestConnection } from '../lib/llm-clie
 import { PromptManager, CATEGORIES } from '../lib/prompt-manager.js';
 import { CommentQueue } from '../lib/comment-queue.js';
 import { fireCommentRequest } from '../lib/comment-request.js';
-import { extractAllComments, extractDocumentText } from '../lib/comment-extractor.js';
+import { extractAllComments, extractDocumentText, extractDocumentStructured, estimateTokenCount } from '../lib/comment-extractor.js';
 import { createSummaryDocument, buildSummaryHtml } from '../lib/document-generator.js';
 
 // Global configuration (defaults from env, overridable via UI/localStorage)
@@ -15,6 +15,10 @@ let config = {
     backend: 'ollama',
     trackChangesEnabled: true,
     lineDiffEnabled: false,
+    docExtraction: {
+        richness: 'plain',
+        maxLength: 50000
+    },
     backends: {
         ollama: {
             url: process.env.DEFAULT_OLLAMA_URL || '/ollama',
@@ -118,6 +122,7 @@ function initialize() {
     updateDotIndicators();
     updateReviewButton();
     updateTabDisabledState();
+    updateTokenEstimate();
 
     // Detect WordApi 1.4 support for comment features
     if (typeof Office !== 'undefined' && Office.context && Office.context.requirements) {
@@ -178,6 +183,11 @@ function loadSettings() {
                 // New nested format -- merge normally
                 config = { ...config, ...parsed };
             }
+
+            // Ensure docExtraction defaults exist (for configs saved before this feature)
+            if (!config.docExtraction) {
+                config.docExtraction = { richness: 'plain', maxLength: 50000 };
+            }
         }
     } catch (e) {
         console.error("Failed to load settings:", e);
@@ -201,10 +211,15 @@ function saveSettings() {
     }
     config.trackChangesEnabled = trackChanges;
     config.lineDiffEnabled = lineDiff;
+    config.docExtraction = {
+        richness: document.getElementById('docRichnessSelect').value,
+        maxLength: parseInt(document.getElementById('docMaxLength').value, 10) || 50000
+    };
 
     try {
         localStorage.setItem('wordAI.config', JSON.stringify(config));
         addLog("Settings saved.", "success");
+        updateTokenEstimate();
 
         // Re-test connection with new settings
         testConnectionUI();
@@ -234,6 +249,15 @@ function updateUIFromConfig() {
     } else {
         // Ollama: enable dropdown (models populated by testConnectionUI)
         modelSelect.disabled = false;
+    }
+
+    const richnessSelect = document.getElementById('docRichnessSelect');
+    if (richnessSelect && config.docExtraction) {
+        richnessSelect.value = config.docExtraction.richness || 'plain';
+    }
+    const maxLengthInput = document.getElementById('docMaxLength');
+    if (maxLengthInput && config.docExtraction) {
+        maxLengthInput.value = config.docExtraction.maxLength || 50000;
     }
 }
 
@@ -319,6 +343,7 @@ function handleCategoryPromptSelect(category, promptId) {
         updateDotIndicators();
         updateReviewButton();
         updateTabDisabledState();
+        updateTokenEstimate();
         return;
     }
 
@@ -341,6 +366,7 @@ function handleCategoryPromptSelect(category, promptId) {
     updateDotIndicators();
     updateReviewButton();
     updateTabDisabledState();
+    updateTokenEstimate();
 }
 
 /**
@@ -493,6 +519,88 @@ function updateReviewButton() {
             btn.title = 'Select an Amendment or Comment prompt to enable';
             break;
     }
+    updateTokenEstimate();
+}
+
+/**
+ * Updates the token estimation display with current prompt and data sizes.
+ * Shows estimated total tokens across: active context prompt + active
+ * category prompt (amendment/comment/summary) + data caps (maxLength for
+ * document text when {whole document} is used).
+ *
+ * Uses estimateTokenCount (Math.ceil(text.length / 4)) heuristic.
+ * Informational only -- helps users gauge LLM context window fit.
+ */
+function updateTokenEstimate() {
+    const container = document.getElementById('tokenEstimate');
+    const valueEl = document.getElementById('tokenEstimateValue');
+    const breakdownEl = document.getElementById('tokenEstimateBreakdown');
+    if (!container || !valueEl) return;
+
+    const mode = promptManager.getActiveMode();
+    if (mode === 'none') {
+        container.style.display = 'none';
+        return;
+    }
+
+    let totalTokens = 0;
+    const parts = [];
+
+    // Context prompt tokens (always included if active)
+    const contextPrompt = promptManager.getActivePrompt('context');
+    if (contextPrompt && contextPrompt.template) {
+        const ctxTokens = estimateTokenCount(contextPrompt.template);
+        totalTokens += ctxTokens;
+        parts.push(`ctx:~${ctxTokens}`);
+    }
+
+    if (mode === 'summary') {
+        // Summary mode: summary prompt + data caps
+        const summaryPrompt = promptManager.getActivePrompt('summary');
+        if (summaryPrompt && summaryPrompt.template) {
+            const summTokens = estimateTokenCount(summaryPrompt.template);
+            totalTokens += summTokens;
+            parts.push(`prompt:~${summTokens}`);
+
+            // If prompt uses {whole document}, add max document text cap
+            if (summaryPrompt.template.includes('{whole document}')) {
+                const maxLen = (config.docExtraction && config.docExtraction.maxLength) || 50000;
+                const docTokensCap = estimateTokenCount('x'.repeat(maxLen));
+                totalTokens += docTokensCap;
+                parts.push(`doc:up to ~${docTokensCap}`);
+            }
+
+            // Comments data is variable (depends on document), show as note
+            if (summaryPrompt.template.includes('{comments}')) {
+                parts.push(`+comments`);
+            }
+        }
+    } else {
+        // Amendment/comment mode: category prompt
+        const categories = ['amendment', 'comment'];
+        for (const cat of categories) {
+            const prompt = promptManager.getActivePrompt(cat);
+            if (prompt && prompt.template) {
+                const catTokens = estimateTokenCount(prompt.template);
+                totalTokens += catTokens;
+                parts.push(`${cat.substring(0, 5)}:~${catTokens}`);
+            }
+        }
+        // Selection text is variable, show as note
+        parts.push('+selection');
+    }
+
+    container.style.display = 'flex';
+    valueEl.textContent = `~${totalTokens.toLocaleString()}`;
+    breakdownEl.textContent = `(${parts.join(' | ')})`;
+
+    // Color coding based on rough context window thresholds
+    valueEl.classList.remove('warning', 'danger');
+    if (totalTokens > 100000) {
+        valueEl.classList.add('danger');
+    } else if (totalTokens > 50000) {
+        valueEl.classList.add('warning');
+    }
 }
 
 /**
@@ -572,6 +680,7 @@ function handleDeletePromptConfirm(category) {
     updateDotIndicators();
     updateReviewButton();
     updateTabDisabledState();
+    updateTokenEstimate();
 }
 
 /**
@@ -584,6 +693,7 @@ function handleResetPrompt(category) {
     document.getElementById(`promptTextarea-${category}`).value = '';
     unsavedText[category] = '';
     addLog(`${capitalize(category)} prompt text cleared`, "info");
+    updateTokenEstimate();
 }
 
 /**
@@ -737,8 +847,11 @@ async function handleSummaryGeneration() {
         const summaryOpts = {};
         const activeSummaryPrompt = promptManager.getActivePrompt('summary');
         if (activeSummaryPrompt && activeSummaryPrompt.template.includes('{whole document}')) {
-            addLog('Extracting document text...', 'info');
-            summaryOpts.documentText = await extractDocumentText();
+            const extraction = config.docExtraction || {};
+            const richness = extraction.richness || 'plain';
+            const maxLength = extraction.maxLength || 50000;
+            addLog(`Extracting document text (${richness}, max ${maxLength} chars)...`, 'info');
+            summaryOpts.documentText = await extractDocumentStructured({ richness, maxLength });
         }
 
         // 3. Compose messages using PromptManager
