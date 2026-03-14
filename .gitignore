@@ -31,3 +31,6 @@ Thumbs.db
 
 # Word API reference docs
 word_api_docs/
+
+# Local scripts
+start.sh

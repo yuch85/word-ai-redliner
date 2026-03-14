@@ -2,7 +2,7 @@
  * Unit tests for src/lib/comment-extractor.js
  * Tests extractAllComments function with mocked Word API.
  */
-const { extractAllComments } = require('../src/lib/comment-extractor.js');
+const { extractAllComments, extractDocumentText } = require('../src/lib/comment-extractor.js');
 
 // ============================================================================
 // Word API Mock Setup
@@ -231,5 +231,89 @@ describe('extractAllComments', () => {
         const result = await extractAllComments();
 
         expect(result[0].associatedText).toBe('');
+    });
+});
+
+// ============================================================================
+// extractDocumentText Tests
+// ============================================================================
+
+describe('extractDocumentText', () => {
+    let mockBodyText;
+
+    beforeEach(() => {
+        mockBodyText = '';
+        mockContext = {
+            document: {
+                body: {
+                    text: '',
+                    load: jest.fn(),
+                    getComments: jest.fn(() => ({
+                        items: [],
+                        load: jest.fn()
+                    }))
+                }
+            },
+            sync: jest.fn(async () => {
+                // After sync, set the text property as Word API would
+                mockContext.document.body.text = mockBodyText;
+            })
+        };
+
+        global.Word = {
+            run: jest.fn(async (callback) => {
+                return callback(mockContext);
+            })
+        };
+    });
+
+    test('returns the document body text', async () => {
+        mockBodyText = 'This is the full document text with paragraphs and content.';
+
+        const result = await extractDocumentText();
+
+        expect(result).toBe('This is the full document text with paragraphs and content.');
+    });
+
+    test('returns empty string when document body is empty', async () => {
+        mockBodyText = '';
+
+        const result = await extractDocumentText();
+
+        expect(result).toBe('');
+    });
+
+    test('truncates text longer than 50000 characters with "..."', async () => {
+        mockBodyText = 'X'.repeat(60000);
+
+        const result = await extractDocumentText();
+
+        expect(result.length).toBe(50003); // 50000 + "..."
+        expect(result).toBe('X'.repeat(50000) + '...');
+    });
+
+    test('does not truncate text at exactly 50000 characters', async () => {
+        mockBodyText = 'Y'.repeat(50000);
+
+        const result = await extractDocumentText();
+
+        expect(result.length).toBe(50000);
+        expect(result).toBe('Y'.repeat(50000));
+    });
+
+    test('calls body.load with text property', async () => {
+        mockBodyText = 'Some text';
+
+        await extractDocumentText();
+
+        expect(mockContext.document.body.load).toHaveBeenCalledWith('text');
+    });
+
+    test('calls context.sync()', async () => {
+        mockBodyText = 'Some text';
+
+        await extractDocumentText();
+
+        expect(mockContext.sync).toHaveBeenCalled();
     });
 });
