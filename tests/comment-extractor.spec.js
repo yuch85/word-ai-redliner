@@ -2,7 +2,7 @@
  * Unit tests for src/lib/comment-extractor.js
  * Tests extractAllComments function with mocked Word API.
  */
-const { extractAllComments, extractDocumentText } = require('../src/lib/comment-extractor.js');
+const { extractAllComments, extractDocumentText, extractDocumentStructured, estimateTokenCount } = require('../src/lib/comment-extractor.js');
 
 // ============================================================================
 // Word API Mock Setup
@@ -315,5 +315,405 @@ describe('extractDocumentText', () => {
         await extractDocumentText();
 
         expect(mockContext.sync).toHaveBeenCalled();
+    });
+});
+
+// ============================================================================
+// extractDocumentStructured Tests
+// ============================================================================
+
+describe('extractDocumentStructured', () => {
+    let mockParagraphs;
+    let structuredSyncCount;
+
+    /**
+     * Creates a mock paragraph object for structured extraction tests.
+     */
+    function createMockParagraph(text, styleBuiltIn = 'Normal', listItem = null) {
+        return {
+            text,
+            styleBuiltIn,
+            isListItem: listItem !== null,
+            listItemOrNullObject: listItem
+                ? { isNullObject: false, ...listItem }
+                : { isNullObject: true },
+            load: jest.fn()
+        };
+    }
+
+    beforeEach(() => {
+        mockParagraphs = [];
+        structuredSyncCount = 0;
+
+        mockContext = {
+            document: {
+                body: {
+                    paragraphs: {
+                        items: [],
+                        load: jest.fn()
+                    }
+                }
+            },
+            sync: jest.fn(async () => {
+                structuredSyncCount++;
+                // After first sync, populate items from mockParagraphs
+                if (structuredSyncCount === 1) {
+                    mockContext.document.body.paragraphs.items = mockParagraphs;
+                }
+            })
+        };
+
+        global.Word = {
+            run: jest.fn(async (callback) => {
+                return callback(mockContext);
+            })
+        };
+    });
+
+    // --- 'plain' richness ---
+
+    describe('plain richness', () => {
+        test('returns concatenated paragraph text separated by newlines', async () => {
+            mockParagraphs = [
+                createMockParagraph('First paragraph.'),
+                createMockParagraph('Second paragraph.'),
+                createMockParagraph('Third paragraph.')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'plain' });
+
+            expect(result).toBe('First paragraph.\nSecond paragraph.\nThird paragraph.');
+        });
+
+        test('returns empty string for no paragraphs', async () => {
+            mockParagraphs = [];
+
+            const result = await extractDocumentStructured({ richness: 'plain' });
+
+            expect(result).toBe('');
+        });
+
+        test('truncates at maxLength with "... [truncated]" suffix', async () => {
+            mockParagraphs = [
+                createMockParagraph('A'.repeat(60000))
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'plain', maxLength: 100 });
+
+            expect(result).toBe('A'.repeat(100) + '... [truncated]');
+        });
+
+        test('skips empty paragraphs', async () => {
+            mockParagraphs = [
+                createMockParagraph('Text'),
+                createMockParagraph(''),
+                createMockParagraph('   '),
+                createMockParagraph('More text')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'plain' });
+
+            expect(result).toBe('Text\nMore text');
+        });
+    });
+
+    // --- 'headings' richness ---
+
+    describe('headings richness', () => {
+        test('Heading1 paragraph gets "# " prefix', async () => {
+            mockParagraphs = [
+                createMockParagraph('Title', 'Heading1')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'headings' });
+
+            expect(result).toBe('# Title');
+        });
+
+        test('Heading2 paragraph gets "## " prefix', async () => {
+            mockParagraphs = [
+                createMockParagraph('Section', 'Heading2')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'headings' });
+
+            expect(result).toBe('## Section');
+        });
+
+        test('Normal paragraphs have no prefix', async () => {
+            mockParagraphs = [
+                createMockParagraph('Regular text', 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'headings' });
+
+            expect(result).toBe('Regular text');
+        });
+
+        test('Heading followed by double newline (blank line)', async () => {
+            mockParagraphs = [
+                createMockParagraph('Intro text', 'Normal'),
+                createMockParagraph('Section Title', 'Heading1'),
+                createMockParagraph('Section content', 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'headings' });
+
+            expect(result).toBe('Intro text\n\n# Section Title\nSection content');
+        });
+
+        test('empty paragraphs are skipped', async () => {
+            mockParagraphs = [
+                createMockParagraph('Title', 'Heading1'),
+                createMockParagraph(''),
+                createMockParagraph('Content', 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'headings' });
+
+            expect(result).toBe('# Title\nContent');
+        });
+    });
+
+    // --- 'structured' richness ---
+
+    describe('structured richness', () => {
+        test('heading paragraphs get "#" prefix matching level', async () => {
+            mockParagraphs = [
+                createMockParagraph('Main Title', 'Heading1'),
+                createMockParagraph('Sub Section', 'Heading3')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'structured' });
+
+            expect(result).toContain('# Main Title');
+            expect(result).toContain('### Sub Section');
+        });
+
+        test('list items get indentation by level and listString prefix', async () => {
+            mockParagraphs = [
+                createMockParagraph('Item one', 'ListParagraph', { level: 0, listString: '1.' }),
+                createMockParagraph('Sub item', 'ListParagraph', { level: 1, listString: 'a)' })
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'structured' });
+
+            expect(result).toContain('(1.) Item one');
+            expect(result).toContain('  (a)) Sub item');
+        });
+
+        test('normal paragraphs have no prefix', async () => {
+            mockParagraphs = [
+                createMockParagraph('Just regular text', 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'structured' });
+
+            expect(result).toBe('Just regular text');
+        });
+
+        test('empty paragraphs are skipped', async () => {
+            mockParagraphs = [
+                createMockParagraph('Before', 'Normal'),
+                createMockParagraph('', 'Normal'),
+                createMockParagraph('After', 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'structured' });
+
+            expect(result).toBe('Before\nAfter');
+        });
+
+        test('heading followed by double newline, other paragraphs by single newline', async () => {
+            mockParagraphs = [
+                createMockParagraph('Normal text', 'Normal'),
+                createMockParagraph('A Heading', 'Heading2'),
+                createMockParagraph('More text', 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'structured' });
+
+            expect(result).toBe('Normal text\n\n## A Heading\nMore text');
+        });
+
+        test('mixed content: headings, lists, normal text', async () => {
+            mockParagraphs = [
+                createMockParagraph('Document Title', 'Heading1'),
+                createMockParagraph('Introduction paragraph.', 'Normal'),
+                createMockParagraph('First Item', 'ListParagraph', { level: 0, listString: '1.' }),
+                createMockParagraph('Second Item', 'ListParagraph', { level: 0, listString: '2.' }),
+                createMockParagraph('Sub Section', 'Heading2'),
+                createMockParagraph('Details here.', 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'structured' });
+
+            const lines = result.split('\n');
+            expect(lines[0]).toBe('# Document Title');
+            expect(lines[1]).toBe('Introduction paragraph.');
+            expect(lines[2]).toBe('(1.) First Item');
+            expect(lines[3]).toBe('(2.) Second Item');
+            // Blank line before heading
+            expect(lines[4]).toBe('');
+            expect(lines[5]).toBe('## Sub Section');
+            expect(lines[6]).toBe('Details here.');
+        });
+    });
+
+    // --- defaults ---
+
+    describe('defaults', () => {
+        test('no args defaults to richness=plain, maxLength=50000', async () => {
+            mockParagraphs = [
+                createMockParagraph('Hello world', 'Normal')
+            ];
+
+            const result = await extractDocumentStructured();
+
+            expect(result).toBe('Hello world');
+        });
+
+        test('only richness provided, maxLength defaults to 50000', async () => {
+            mockParagraphs = [
+                createMockParagraph('X'.repeat(60000), 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'plain' });
+
+            // Should be truncated at 50000
+            expect(result.length).toBe(50000 + '... [truncated]'.length);
+        });
+
+        test('only maxLength provided, richness defaults to plain', async () => {
+            mockParagraphs = [
+                createMockParagraph('Simple text', 'Heading1')
+            ];
+
+            // With richness=plain, heading styles are ignored
+            const result = await extractDocumentStructured({ maxLength: 10000 });
+
+            expect(result).toBe('Simple text');
+        });
+    });
+
+    // --- truncation ---
+
+    describe('truncation', () => {
+        test('output longer than maxLength is truncated with "... [truncated]"', async () => {
+            mockParagraphs = [
+                createMockParagraph('A'.repeat(200), 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'plain', maxLength: 50 });
+
+            expect(result).toBe('A'.repeat(50) + '... [truncated]');
+            expect(result.length).toBe(50 + '... [truncated]'.length);
+        });
+
+        test('output exactly at maxLength is not truncated', async () => {
+            mockParagraphs = [
+                createMockParagraph('A'.repeat(100), 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'plain', maxLength: 100 });
+
+            expect(result).toBe('A'.repeat(100));
+        });
+    });
+
+    // --- Word API interaction ---
+
+    describe('Word API interaction', () => {
+        test('loads paragraphs with correct properties for plain', async () => {
+            mockParagraphs = [
+                createMockParagraph('Text', 'Normal')
+            ];
+
+            await extractDocumentStructured({ richness: 'plain' });
+
+            // Should load 'text' only for plain
+            expect(mockParagraphs[0].load).toHaveBeenCalledWith('text');
+        });
+
+        test('loads paragraphs with style properties for structured', async () => {
+            mockParagraphs = [
+                createMockParagraph('Text', 'Normal')
+            ];
+
+            await extractDocumentStructured({ richness: 'structured' });
+
+            expect(mockParagraphs[0].load).toHaveBeenCalledWith('text,styleBuiltIn,isListItem');
+        });
+
+        test('calls context.sync() 2 times for plain (items load + properties load)', async () => {
+            mockParagraphs = [
+                createMockParagraph('Text', 'Normal')
+            ];
+
+            await extractDocumentStructured({ richness: 'plain' });
+
+            expect(structuredSyncCount).toBe(2);
+        });
+
+        test('calls context.sync() 2 times for structured with no list items', async () => {
+            mockParagraphs = [
+                createMockParagraph('Heading', 'Heading1'),
+                createMockParagraph('Body', 'Normal')
+            ];
+
+            await extractDocumentStructured({ richness: 'structured' });
+
+            // 2 syncs: items load + properties load. No 3rd sync because no list items.
+            expect(structuredSyncCount).toBe(2);
+        });
+
+        test('calls context.sync() 3 times for structured with list items', async () => {
+            mockParagraphs = [
+                createMockParagraph('Item', 'ListParagraph', { level: 0, listString: '1.' })
+            ];
+
+            await extractDocumentStructured({ richness: 'structured' });
+
+            // 3 syncs: items + properties + listItem details
+            expect(structuredSyncCount).toBe(3);
+        });
+    });
+});
+
+// ============================================================================
+// estimateTokenCount Tests
+// ============================================================================
+
+describe('estimateTokenCount', () => {
+    test('returns Math.ceil(text.length / 4) for English text', async () => {
+        const text = 'This is a sample English text for testing.';
+        expect(estimateTokenCount(text)).toBe(Math.ceil(text.length / 4));
+    });
+
+    test('returns 0 for empty string', () => {
+        expect(estimateTokenCount('')).toBe(0);
+    });
+
+    test('returns 0 for null', () => {
+        expect(estimateTokenCount(null)).toBe(0);
+    });
+
+    test('returns 0 for undefined', () => {
+        expect(estimateTokenCount(undefined)).toBe(0);
+    });
+
+    test('returns 1 for a 1-4 character string', () => {
+        expect(estimateTokenCount('a')).toBe(1);
+        expect(estimateTokenCount('ab')).toBe(1);
+        expect(estimateTokenCount('abc')).toBe(1);
+        expect(estimateTokenCount('abcd')).toBe(1);
+    });
+
+    test('returns 25 for a 100 character string', () => {
+        expect(estimateTokenCount('x'.repeat(100))).toBe(25);
+    });
+
+    test('returns correct value for long text (10000 chars -> 2500)', () => {
+        expect(estimateTokenCount('y'.repeat(10000))).toBe(2500);
     });
 });
