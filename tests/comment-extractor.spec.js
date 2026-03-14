@@ -335,8 +335,8 @@ describe('extractDocumentStructured', () => {
             styleBuiltIn,
             isListItem: listItem !== null,
             listItemOrNullObject: listItem
-                ? { isNullObject: false, ...listItem }
-                : { isNullObject: true },
+                ? { isNullObject: false, load: jest.fn(), ...listItem }
+                : { isNullObject: true, load: jest.fn() },
             load: jest.fn()
         };
     }
