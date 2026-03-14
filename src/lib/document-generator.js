@@ -1,11 +1,17 @@
 /* global Word */
 
+import { marked } from 'marked';
+
+// Configure marked for LLM output: GFM for tables/task lists, breaks for line breaks
+marked.use({ gfm: true, breaks: true });
+
 /**
  * Document Generator Module
  *
  * Creates a new Word document with formatted summary content.
  * Uses Application.createDocument() (WordApi 1.3) for native document
  * creation and body.insertHtml() (WordApi 1.1) for formatted content.
+ * LLM markdown output is converted to HTML via marked before insertion.
  *
  * @module document-generator
  */
@@ -29,12 +35,12 @@ function escapeHtml(str) {
  *
  * Structure:
  *   <h1>Title</h1>
- *   [LLM summary text -- passed through as-is, assumed HTML]
+ *   [LLM summary text -- markdown converted to HTML via marked.parse()]
  *   <hr/>
  *   <h1>Annex: Source Comments</h1>
  *   <h3>Comment 1</h3> ... <h3>Comment N</h3>
  *
- * @param {string} summaryText - The LLM-generated summary (already HTML)
+ * @param {string} summaryText - The LLM-generated summary (markdown, converted to HTML via marked)
  * @param {Array<{index: number, commentText: string, associatedText: string, author: string}>} extractedComments
  * @param {string} [title='Comment Summary'] - Document title
  * @returns {string} Complete HTML string for insertHtml()
@@ -42,8 +48,8 @@ function escapeHtml(str) {
 export function buildSummaryHtml(summaryText, extractedComments, title = 'Comment Summary') {
     let html = `<h1>${escapeHtml(title)}</h1>`;
 
-    // Summary section (LLM output -- already HTML)
-    html += summaryText;
+    // Summary section (LLM markdown output converted to HTML)
+    html += marked.parse(summaryText);
 
     // Separator
     html += '<hr/>';
@@ -63,31 +69,36 @@ export function buildSummaryHtml(summaryText, extractedComments, title = 'Commen
 
 /**
  * Creates a new Word document and inserts formatted HTML content.
- * Two-phase approach: (1) create + open, (2) insert content into now-active document.
+ * Single Word.run approach: create document, insert content into its body,
+ * then open it to display to the user.
  *
- * Phase 1 uses context.application.createDocument() (WordApi 1.3) to create
- * a new empty document, then .open() to display it (makes it the active document).
+ * Uses context.application.createDocument() (WordApi 1.3) to create a new
+ * document, then inserts HTML into newDoc.body (WordApiHiddenDocument 1.3)
+ * before calling .open() to display it.
  *
- * Phase 2 uses a new Word.run where context.document is the newly opened document,
- * then body.insertHtml() (WordApi 1.1) to insert formatted content.
+ * Note: The previous two-phase approach (create+open in one Word.run, then
+ * insert content in a second Word.run) was incorrect because the taskpane
+ * add-in's context.document always refers to the document that loaded the
+ * add-in, not the newly opened document. Content must be inserted into
+ * newDoc.body directly within the same context that created it.
  *
  * @param {string} htmlContent - HTML to insert via body.insertHtml()
  * @param {string} [documentTitle] - Optional title (logged, not used by API)
  * @param {function} [log] - Optional logging callback
  */
 export async function createSummaryDocument(htmlContent, documentTitle, log) {
-    // Phase 1: Create and open new document
     await Word.run(async (context) => {
         const newDoc = context.application.createDocument();
         await context.sync();
-        newDoc.open();
-        await context.sync();
-    });
 
-    // Phase 2: Insert content into the now-active document
-    await Word.run(async (context) => {
-        const body = context.document.body;
-        body.insertHtml(htmlContent, Word.InsertLocation.end);
+        // Insert content into the new document's body before opening.
+        // newDoc.body access requires WordApiHiddenDocument 1.3, which is
+        // supported on Desktop Word (our target platform).
+        newDoc.body.insertHtml(htmlContent, Word.InsertLocation.end);
+        await context.sync();
+
+        // Open the document to display it to the user
+        newDoc.open();
         await context.sync();
     });
 

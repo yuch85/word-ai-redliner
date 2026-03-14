@@ -24,6 +24,7 @@
   "license": "ISC",
   "dependencies": {
     "diff-match-patch": "^1.0.5",
+    "marked": "^17.0.4",
     "office-word-diff": "github:yuch85/office-word-diff"
   },
   "devDependencies": {
