@@ -792,3 +792,11 @@ section {
 .token-estimate-value.danger {
     color: var(--error-color);
 }
+
+/* Help text for settings controls */
+.help-text {
+    display: block;
+    font-size: 11px;
+    color: var(--secondary-text);
+    margin-top: 4px;
+}

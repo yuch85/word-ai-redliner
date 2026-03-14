@@ -192,6 +192,13 @@
                     <input type="number" id="docMaxLength" class="form-control" min="1000" max="500000" step="1000" value="50000">
                     <small class="help-text">Truncates extracted text beyond this limit (default: 50,000)</small>
                 </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="trackedChangesExtraction">
+                        Include Tracked Changes in Summary
+                    </label>
+                    <small class="help-text">Extracts tracked changes (via OOXML) and includes them in the {tracked changes} placeholder</small>
+                </div>
                 <button id="saveSettingsBtn" class="btn btn-secondary full-width">💾 Save Settings</button>
             </div>
         </section>
