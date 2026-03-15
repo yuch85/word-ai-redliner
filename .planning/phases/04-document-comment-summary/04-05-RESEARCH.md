@@ -637,14 +637,339 @@ None -- existing test infrastructure covers all phase requirements. OOXML parsin
 - `reference/docx-redline-js/README.md` -- Library purpose and API surface
 - `reference/docx-redline-js/ARCHITECTURE.md` -- Module responsibilities
 
+## Key Findings from safe-docx Reference Repo (UseJunior/safe-docx)
+
+**Researched:** 2026-03-15
+**Repo:** https://github.com/UseJunior/safe-docx
+**Purpose:** TypeScript-native library for surgical editing of `.docx` files, optimized for AI agent workflows. Built on `@xmldom/xmldom` + `jszip`.
+
+### Finding 11: Multi-Stage Atomization Pipeline — The Intermediate Representation Solution (HIGH confidence)
+
+Safe-docx's most novel contribution is its approach to the **intermediate representation (IR) problem**: the same semantic change can be represented many ways in OOXML (paragraph-level vs run-level revisions, text split across multiple `w:t` elements, field codes vs hardcoded text, etc.). Their solution is a 4-stage normalization pipeline:
+
+1. **Raw Atomization** — walk the OOXML tree and create a `ComparisonUnitAtom` for every leaf node (`w:t`, `w:br`, `w:cr`, `w:tab`, `w:sym`, `w:delText`, etc.). Each atom carries its full ancestry chain, revision tracking parent, and SHA1 hash.
+
+2. **Field Sequence Collapsing** — Word field sequences (`[fldChar begin] → [instrText] → [fldChar separate] → [t] → [fldChar end]`) are collapsed to a single atom based on visible text. This means `2.6` rendered by a field reference and `2.6` as hardcoded text produce the same atom hash.
+
+3. **Contiguous Text Atom Merging** — atoms from adjacent `w:t` elements in the same run/paragraph/revision context are merged. `["Def", "initions"]` → `["Definitions"]`. Only merges when same paragraph, same revision status, and same run properties.
+
+4. **Word-Level Splitting** — merged text is split on word boundaries for fine-grained diffing: `"Hello World"` → `["Hello", " ", "World"]`.
+
+**The core atom type:**
+```typescript
+interface ComparisonUnitAtom {
+  contentElement: WmlElement;       // The leaf element (w:t, w:br, etc.)
+  ancestorElements: WmlElement[];   // Full ancestry chain for context restoration
+  revTrackElement?: WmlElement;     // w:ins, w:del, w:moveFrom, w:moveTo
+  sha1Hash: string;                 // Deterministic equality checking
+  correlationStatus: CorrelationStatus;  // Equal, Deleted, Inserted, MovedSource, etc.
+  rPr?: Element;                    // Cloned run formatting snapshot
+  part: OpcPart;                    // Which package part (document.xml, footnotes.xml, etc.)
+}
+```
+
+**Impact on our implementation:** Our flat change-array approach is correct for read-only extraction. The atomization pipeline is designed for bidirectional document comparison (diff two documents), which is far more complex than our use case. However, the key insight is that **text normalization before comparison matters** — our current implementation handles this adequately by working at the revision-mark level rather than atom level.
+
+### Finding 12: Accept/Reject as Clone+Transform (HIGH confidence)
+
+Instead of trying to manipulate revisions in-place, safe-docx clones the entire document twice and transforms each clone:
+
+```typescript
+const acceptedDoc = doc.cloneNode(true) as Document;
+const rejectedDoc = doc.cloneNode(true) as Document;
+acceptChanges(acceptedDoc);   // Remove all w:del, unwrap all w:ins
+rejectChanges(rejectedDoc);   // Remove all w:ins, unwrap all w:del
+```
+
+Then for each paragraph with revisions, it looks up the same paragraph in both clones (using deterministic bookmarks) to get before-text (rejected) and after-text (accepted).
+
+**Key insight for our implementation:** This clone+transform approach produces cleaner paragraph context. Our current `getContainingParagraphText` walks the original DOM and excludes `w:del`/`w:moveFrom` containers, which is equivalent to the "accepted" view. If we ever need the "rejected" (original) view, cloning would be more reliable.
+
+### Finding 13: Deterministic Bookmarking for Cross-Document Tracking (HIGH confidence)
+
+Safe-docx creates `_bk_*` bookmarks using content-based hashing to identify paragraphs across cloned documents:
+
+```typescript
+function buildParagraphSeed(params) {
+  // Prefer intrinsic w14:paraId if available
+  const intrinsic = getW14ParaId(paragraph);
+  if (intrinsic) return `intrinsic:w14:${intrinsic}`;
+  // Otherwise: hash text + prev/next neighbor text + ancestor signature
+  return `fallback:text=${text}|prev=${prev}|next=${next}|ancestors=${ancestors}`;
+}
+```
+
+**Impact:** Not directly applicable to our extraction (we don't compare two documents), but shows how robust paragraph identification can be done if we ever need to correlate changes across document versions.
+
+### Finding 14: LCS + Jaccard Move Detection (HIGH confidence)
+
+Safe-docx uses Longest Common Subsequence (LCS) to match atoms between original and revised documents, then groups unmatched blocks (consecutive Deleted/Inserted) and tests for moves using **Jaccard word similarity**:
+
+```typescript
+function jaccardWordSimilarity(text1, text2, caseInsensitive = true) {
+  // Jaccard index = |intersection| / |union| of word sets
+  // Order-independent: "fox quick brown" ≡ "brown quick fox"
+}
+// Default threshold: 0.8 (80% similar), minimum 5 words
+```
+
+**Impact:** Our DOM-sibling-based replacement pairing is simpler but covers the most common case (adjacent del+ins from same author). The Jaccard approach would catch replacements that are not adjacent in the DOM, but adds significant complexity. Worth noting as a potential enhancement for v2.
+
+### Finding 15: Comprehensive Property Change Tracking (HIGH confidence)
+
+Safe-docx tracks six types of property changes, with first-class `FormatChangeDetails`:
+
+```typescript
+type FormatChangeDetails = {
+  beforeProperties: Map<string, string>;  // e.g., { "w:b": "1" }
+  afterProperties: Map<string, string>;   // e.g., { "w:b": "1", "w:i": "1" }
+}
+```
+
+All six `*PrChange` types handled: `rPrChange`, `pPrChange`, `sectPrChange`, `tblPrChange`, `trPrChange`, `tcPrChange`.
+
+**Impact:** Our implementation focuses on content changes (ins/del/move). Format changes could be a v2 enhancement — the safe-docx pattern of extracting before/after property maps from `*PrChange` elements is clean and could be adopted.
+
+### Finding 16: Paragraph-Level Revision Detection (MEDIUM confidence)
+
+Safe-docx distinguishes between **run-level** and **paragraph-level** revision markers:
+
+```xml
+<!-- Paragraph-level insertion (whole paragraph was inserted) -->
+<w:p>
+  <w:pPr><w:rPr><w:ins w:id="5" w:author="Dave"/></w:rPr></w:pPr>
+  <w:r><w:t>new paragraph</w:t></w:r>
+</w:p>
+```
+
+Functions `paragraphIsEntirelyInserted()` and `paragraphIsEntirelyDeleted()` detect these by checking if the `w:pPr > w:rPr` contains an `w:ins` or `w:del` marker.
+
+**Impact:** Our implementation processes `w:ins`/`w:del` at the content level. Paragraph-level markers in `w:pPr > w:rPr` could be a source of missed changes. However, these typically coexist with content-level marks, so the practical impact is low.
+
+### Finding 17: OPC Package Architecture (HIGH confidence)
+
+Safe-docx properly handles the OPC (Open Packaging Convention) structure with defined paths:
+
+```typescript
+const DOCX_PATHS = {
+  DOCUMENT: 'word/document.xml',
+  STYLES: 'word/styles.xml',
+  COMMENTS: 'word/comments.xml',
+  // ... etc
+};
+```
+
+Each atom tracks its source `OpcPart`, enabling support for tracked changes in headers, footers, footnotes, and endnotes — not just the document body.
+
+**Impact:** Our `body.getOoxml()` approach only gets the main document body. Tracked changes in headers/footers/footnotes are not captured. This is acceptable for our current scope but worth noting as a limitation.
+
+### Comparative Analysis: safe-docx vs docx-redline-js vs Our Implementation
+
+| Aspect | safe-docx | docx-redline-js | word-ai-redliner (04-05) |
+|--------|-----------|-----------------|--------------------------|
+| **Language** | TypeScript | JavaScript | JavaScript (browser) |
+| **DOM API** | @xmldom/xmldom (W3C) | Custom WmlElement AST | Browser DOMParser |
+| **Purpose** | Bidirectional doc editing | Tracked changes generation | Read-only extraction |
+| **IR Approach** | 4-stage atom normalization | Run model with offsets | Flat change array |
+| **Comparison** | LCS + Jaccard move detect | Binary diff | DOM sibling pairing |
+| **Field handling** | Collapse to visible text | Structured elements | Not applicable |
+| **Move detection** | Jaccard similarity (80%) | Not handled | DOM-level w:moveFrom/To |
+| **Format changes** | Full 6-type PrChange | Limited rPrChange | Not extracted |
+| **Package parts** | All parts (headers, etc.) | Document body only | Document body only |
+| **Complexity** | ~5000 LOC | ~3000 LOC | ~300 LOC |
+| **Dependencies** | @xmldom/xmldom, jszip | xmldom | None (browser DOMParser) |
+
+### Key Takeaway: The IR Problem Is Solved At The Right Level
+
+The "intermediate representation issue" has different solutions depending on the use case:
+
+- **safe-docx** needs a full IR because it must compare, edit, and reconstruct documents with formatting fidelity. The 4-stage atomization pipeline is necessary for reliable bidirectional diff.
+
+- **docx-redline-js** needs a run model with offsets because it must serialize text diffs back into OOXML revision marks.
+
+- **Our implementation** needs only a flat change list because we're extracting metadata for LLM consumption. The change array with type/text/author/date/paragraphText is the right abstraction level — it's simple, testable, and produces excellent LLM input without the complexity of a full IR.
+
+The important lesson from safe-docx is that **normalization matters even at our abstraction level**: our w:proofErr removal, table row marker skipping, and text element handling (w:br, w:tab, w:cr, w:noBreakHyphen) are essential normalization steps that prevent garbled output. We have the right set of normalizations for our use case.
+
 ## Metadata
 
 **Confidence breakdown:**
 - OOXML element types: HIGH - directly verified from source code and tests
 - Namespace handling: HIGH - dual query pattern consistently used throughout codebase
 - Move operations: HIGH - explicitly coded in ingestion and format extraction
-- Replacement pairing: HIGH - confirmed library does NOT pair; our pairing is a higher-level interpretation
-- Paragraph context: HIGH - text extraction pattern verified in ingestion-export.js
+- Replacement pairing: HIGH - confirmed both libraries use different pairing strategies; our DOM-sibling approach is validated
+- Paragraph context: HIGH - text extraction pattern verified in both libraries
+- Intermediate representation: HIGH - safe-docx's 4-stage pipeline thoroughly analyzed; confirms our flat approach is correct for read-only extraction
+- Accept/reject clone pattern: HIGH - verified from extractRevisions source
 
-**Research date:** 2026-03-14
-**Valid until:** 2026-04-14 (OOXML spec is stable; library patterns are architectural, not version-dependent)
+**Research date:** 2026-03-15 (updated with safe-docx and xmldom analysis)
+**Valid until:** 2026-04-15 (OOXML spec is stable; library patterns are architectural, not version-dependent)
+
+**Sources added:**
+- `reference/safe-docx/packages/docx-core/src/comparison/` — Atomization, LCS, correlation
+- `reference/safe-docx/packages/docx-core/src/tracked-changes/` — Accept/reject, revision extraction
+- `reference/safe-docx/packages/docx-core/src/ooxml/` — Namespace constants, OPC handling
+- `reference/safe-docx/packages/docx-core/src/paragraphs/` — Paragraph identification, bookmarking
+- `reference/xmldom/lib/dom.js` — getElementsByTagNameNS, getAttributeNS, lookupNamespaceURI implementation
+- `reference/xmldom/lib/sax.js` — Namespace prefix resolution during parsing
+- `reference/xmldom/lib/conventions.js` — Predefined namespace URI constants
+- `reference/xmldom/test/parse/namespace.test.js` — Namespace inheritance and shadowing tests
+
+## Key Findings from xmldom Reference Repo (@xmldom/xmldom)
+
+**Researched:** 2026-03-15
+**Repo:** https://github.com/xmldom/xmldom
+**Purpose:** W3C DOM Level 2 implementation for JavaScript — the XML parser used by safe-docx and many Node.js OOXML libraries. Understanding its internals clarifies namespace behavior differences between server-side and browser DOMParser.
+
+### Finding 18: getElementsByTagNameNS Internals — Strict URI+LocalName Matching (HIGH confidence)
+
+The xmldom implementation of `getElementsByTagNameNS` (dom.js lines 2561-2576) matches on **namespace URI + localName**, never on prefix:
+
+```javascript
+getElementsByTagNameNS: function (namespaceURI, localName) {
+    return new LiveNodeList(this, function (base) {
+        var ls = [];
+        _visitNode(base, function (node) {
+            if (node !== base && node.nodeType === ELEMENT_NODE &&
+                (namespaceURI === '*' || node.namespaceURI === namespaceURI) &&
+                (localName === '*' || node.localName == localName)) {
+                ls.push(node);
+            }
+        });
+        return ls;
+    });
+}
+```
+
+**Critical detail:** The comparison uses `===` for namespaceURI (strict) but `==` for localName (loose). This means `null` namespaceURI won't match `undefined`, but localName matching is slightly looser. Browser DOMParser uses strict equality for both.
+
+**Impact on our implementation:** Our `queryElements()` function's NS-first-then-prefix-fallback pattern is correct and necessary. When `getElementsByTagNameNS(W_NS, 'ins')` works, it's because the parser correctly resolved the `w:` prefix to the `W_NS` URI during parsing. When it returns empty, the prefix wasn't resolved — and `getElementsByTagName('w:ins')` catches those cases by matching on the qualified name string.
+
+### Finding 19: Namespace Prefix Resolution Chain (HIGH confidence)
+
+xmldom resolves prefixes through a `_nsMap` property on each Element, populated during SAX parsing (sax.js lines 467-540). The resolution walks up the parent chain:
+
+```javascript
+lookupNamespaceURI: function (prefix) {
+    var el = this;
+    while (el) {
+        var map = el._nsMap;
+        if (map && hasOwn(map, prefix)) {
+            return map[prefix];
+        }
+        el = el.nodeType == ATTRIBUTE_NODE ? el.ownerDocument : el.parentNode;
+    }
+    return null;
+}
+```
+
+**Key insight for OOXML:** When `body.getOoxml()` returns XML, the `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"` declaration is typically on the `<w:document>` root element. All descendant elements inherit this mapping. The browser DOMParser does the same — prefix resolution is inherited from ancestors.
+
+**When resolution fails:** If the XML lacks the `xmlns:w` declaration (malformed OOXML), both xmldom and browser DOMParser will set `namespaceURI` to `null` for `w:` prefixed elements. In this case:
+- `getElementsByTagNameNS(W_NS, 'ins')` returns **empty** (URI mismatch: `null !== W_NS`)
+- `getElementsByTagName('w:ins')` **still works** (matches on qualified name string)
+
+This validates our dual-query fallback pattern.
+
+### Finding 20: getAttributeNS Behavior — Null vs Undefined (HIGH confidence)
+
+xmldom's `getAttributeNS` (dom.js lines 2441-2444) returns `null` for missing attributes (matching DOM spec). The underlying `getNamedItemNS` (dom.js lines 685-699) normalizes empty string to `null`:
+
+```javascript
+getNamedItemNS: function (namespaceURI, localName) {
+    if (!namespaceURI) { namespaceURI = null; }
+    var i = 0;
+    while (i < this.length) {
+        var node = this[i];
+        if (node.localName === localName && node.namespaceURI === namespaceURI) {
+            return node;
+        }
+        i++;
+    }
+    return null;
+}
+```
+
+**The OOXML attribute problem:** In OOXML, the `w:author` attribute on `<w:ins w:author="John">` is namespace-qualified. Its `namespaceURI` should be `W_NS` and `localName` should be `author`. So `getAttributeNS(W_NS, 'author')` is the correct call.
+
+**However**, browser DOMParser behavior is inconsistent here. Some browsers treat `w:author` as having namespace URI = `W_NS` (correct per spec), while others treat it as a non-namespaced attribute with qualified name `w:author`. This is why our triple fallback in `getChangeAuthor()` is essential:
+
+```javascript
+function getChangeAuthor(element) {
+    return element.getAttributeNS(W_NS, 'author')   // Spec-correct
+        || element.getAttribute('w:author')           // Qualified name fallback
+        || element.getAttribute('author')             // Plain fallback
+        || null;
+}
+```
+
+### Finding 21: LiveNodeList vs Static Array — Mutation Safety (MEDIUM confidence)
+
+xmldom's `getElementsByTagNameNS` returns a `LiveNodeList` — a live collection that updates when the DOM changes. Our `removeProofErrors()` function mutates the DOM (removing `w:proofErr` elements) while iterating, which could cause issues with a live collection.
+
+Our implementation correctly handles this by converting to a static array first:
+
+```javascript
+function removeProofErrors(parent) {
+    const proofErrors = queryElements(parent, 'proofErr');  // Returns Array.from()
+    for (const el of proofErrors) {
+        el.parentNode.removeChild(el);  // Safe: iterating static array
+    }
+}
+```
+
+The `Array.from()` inside `queryElements()` snapshots the live collection, preventing mutation-during-iteration bugs. This pattern is correct for both xmldom and browser DOMParser.
+
+### Finding 22: Namespace Prefix Case Sensitivity (HIGH confidence)
+
+xmldom treats namespace prefixes as **case-sensitive** (sax.js line 513: simple string split on `:`). `w:` and `W:` are different prefixes. Browser DOMParser behaves the same for XML mode (`application/xml`).
+
+**Impact:** OOXML always uses lowercase `w:` prefix for WordprocessingML. There is no risk of case mismatch in well-formed OOXML. But if we ever parse user-generated XML, this could be a concern.
+
+### Finding 23: Error Handling Differences — Browser vs xmldom (MEDIUM confidence)
+
+When parsing malformed XML:
+- **xmldom:** Reports errors via configurable `onError` callback. Fatal errors throw `ParseError`. Non-fatal errors (warnings) are logged but parsing continues.
+- **Browser DOMParser:** Returns a document containing a `<parsererror>` element. Does not throw.
+
+Our `extractTrackedChanges()` wraps the entire pipeline in try/catch and returns `{ changes: [] }` on failure. This handles both runtimes correctly. However, we should note that browser DOMParser's "silent failure" mode means malformed OOXML could produce a parseable but incorrect DOM tree without throwing — our code would then extract zero changes (since `w:body` wouldn't be found), which is the correct degraded behavior.
+
+### Finding 24: The pkg:package Namespace — Not Special-Cased (HIGH confidence)
+
+Neither xmldom nor browser DOMParser has special handling for the `pkg:` namespace (`http://schemas.microsoft.com/office/2006/xmlPackage`). It's resolved through standard prefix-to-URI mapping from `xmlns:pkg="..."` declarations.
+
+xmldom's predefined namespace constants (conventions.js lines 384-412) include only HTML, SVG, XML, and XMLNS — not any Office/OOXML namespaces. This confirms that OOXML namespace resolution depends entirely on the xmlns declarations present in the XML itself.
+
+**Impact:** Our `extractDocumentBody()` function correctly handles this by trying both NS-qualified and prefix-based queries for `pkg:xmlData`:
+
+```javascript
+let xmlDataElements = doc.getElementsByTagNameNS(PKG_NS, 'xmlData');
+if (xmlDataElements.length === 0) {
+    xmlDataElements = doc.getElementsByTagName('pkg:xmlData');
+}
+```
+
+### Comparative Analysis: xmldom vs Browser DOMParser for OOXML
+
+| Behavior | xmldom | Browser DOMParser | Impact on Our Code |
+|----------|--------|-------------------|-------------------|
+| NS prefix resolution | Via `_nsMap` parent chain | Via internal NS map | Both resolve correctly with xmlns |
+| getElementsByTagNameNS | URI + localName strict match | URI + localName strict match | Our dual-query fallback handles edge cases |
+| getAttributeNS | Returns null if missing | Returns null if missing | Consistent behavior |
+| Attribute NS resolution | Prefix resolved to URI | **Inconsistent across browsers** | Our triple fallback is essential |
+| LiveNodeList mutation | Live (unsafe to mutate during iteration) | Live (unsafe to mutate during iteration) | Our Array.from() snapshot is correct |
+| Malformed XML | Throws ParseError or calls onError | Returns `<parsererror>` document | Our try/catch handles both |
+| Prefix case sensitivity | Case-sensitive | Case-sensitive | No concern for well-formed OOXML |
+| pkg: namespace | Standard resolution from xmlns | Standard resolution from xmlns | Both work with our dual-query |
+
+### Key Takeaway for Plan 04-05
+
+The xmldom analysis **validates our implementation choices**:
+
+1. **Dual-query pattern is correct and necessary** — attribute namespace resolution varies across browsers, and our NS-first-then-prefix fallback covers all cases
+2. **Array.from() on query results is essential** — prevents mutation-during-iteration bugs with LiveNodeList
+3. **Triple fallback on attribute access is essential** — browser inconsistency with namespace-qualified attributes on OOXML elements
+4. **try/catch around the entire pipeline is correct** — handles both xmldom-style throws and browser-style silent failures
+5. **No OOXML-specific namespace constants are built-in** — we must always declare `W_NS` and `PKG_NS` ourselves
+
+The one new insight is that **browser DOMParser's attribute namespace handling is the weakest link**: some browsers may not correctly resolve `w:author` to namespace URI `W_NS`, treating it as a plain attribute with qualified name `w:author` instead. Our existing triple-fallback in `getChangeAuthor()`/`getChangeDate()` already handles this, confirming the implementation is robust.
