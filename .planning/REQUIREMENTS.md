@@ -33,15 +33,15 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Comment Insertion
 
-- [ ] **CMNT-01**: Comment prompt sends selected text to LLM and receives analysis text
-- [ ] **CMNT-02**: LLM analysis inserted as Word comment on the selected range via `Range.insertComment()`
+- [x] **CMNT-01**: Comment prompt sends selected text to LLM and receives analysis text
+- [x] **CMNT-02**: LLM analysis inserted as Word comment on the selected range via `Range.insertComment()`
 - [x] **CMNT-03**: Selected range captured at request time (before async LLM call) using hidden bookmarks
 - [x] **CMNT-04**: Comment attaches to correct location even after user moves cursor to different text
 - [x] **CMNT-05**: User can fire multiple concurrent comment requests without waiting for previous to complete
 - [x] **CMNT-06**: UI displays count of in-flight comment requests
 - [x] **CMNT-07**: Comments appear silently on the original range when LLM responds (no interruption)
 - [x] **CMNT-08**: Hidden bookmarks cleaned up after comment insertion
-- [ ] **CMNT-09**: When both Amendment and Comment are active on same selection, amendment executes first, then comment fires async
+- [x] **CMNT-09**: When both Amendment and Comment are active on same selection, amendment executes first, then comment fires async
 - [x] **CMNT-10**: WordApi 1.4 runtime detection — comment features gracefully disabled if unsupported
 - [x] **CMNT-11**: Prototype spike validates bookmark range persistence under document edits before full implementation
 
@@ -49,13 +49,13 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **SUMM-01**: Summary is a 4th prompt category tab alongside Context, Amendment, Comment with its own prompt library
 - [x] **SUMM-02**: When Summary is active mode, Amendment and Comment are disabled; only Context remains available
-- [ ] **SUMM-03**: Review button relabels to "Generate Summary" when Summary is the active mode
+- [x] **SUMM-03**: Review button relabels to "Generate Summary" when Summary is the active mode
 - [x] **SUMM-04**: All document comments extracted with their associated text ranges via Office JS API
 - [x] **SUMM-05**: Extracted comments + active Summary prompt + optional Context sent to LLM as structured input
 - [x] **SUMM-06**: LLM analysis output opened as new Word document via Application.createDocument()
 - [x] **SUMM-07**: Generated document includes formatted summary plus annex with source comments and cross-references
-- [ ] **SUMM-08**: After firing summary, user can switch back to Amendment/Comment mode immediately
-- [ ] **SUMM-09**: Status summary indicators below Save/Delete/Clear buttons removed (UI cleanup)
+- [x] **SUMM-08**: After firing summary, user can switch back to Amendment/Comment mode immediately
+- [x] **SUMM-09**: Status summary indicators below Save/Delete/Clear buttons removed (UI cleanup)
 
 ## v2 Requirements
 

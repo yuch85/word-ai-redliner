@@ -13,9 +13,9 @@ This milestone adds four major capabilities to the Word AI Redliner add-in: vLLM
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: LLM Client + vLLM Backend** - Extract LLM logic into unified client, add vLLM support, strip think tags (completed 2026-03-10)
-- [ ] **Phase 2: Three-Category Prompt System** - Split prompts into Context/Amendment/Comment categories with activation rules
-- [ ] **Phase 3: Async Comment Queue** - Fire-and-forget comment insertion with bookmark-based range persistence
-- [ ] **Phase 4: Document Comment Summary** - Extract all document comments, summarize via LLM, export as new Word document
+- [x] **Phase 2: Three-Category Prompt System** - Split prompts into Context/Amendment/Comment categories with activation rules (completed 2026-03-11)
+- [x] **Phase 3: Async Comment Queue** - Fire-and-forget comment insertion with bookmark-based range persistence (completed 2026-03-12)
+- [x] **Phase 4: Document Comment Summary** - Extract all document comments, summarize via LLM, export as new Word document (completed 2026-03-15)
 
 ## Phase Details
 
@@ -50,7 +50,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — PromptManager module with state model, CRUD, activation, validation, persistence, and test scaffolds
 - [x] 02-02-PLAN.md — Three-tab UI with status summary, dynamic Review button, and PromptManager wiring
-- [ ] 02-03-PLAN.md — Prompt composition (composeMessages) and review workflow integration
+- [x] 02-03-PLAN.md — Prompt composition (composeMessages) and review workflow integration
 
 ### Phase 3: Async Comment Queue
 **Goal**: Users can fire comment requests and continue working while the LLM processes, with comments silently appearing on the correct text when responses arrive
@@ -60,15 +60,15 @@ Plans:
   1. User can select text, submit a comment prompt, immediately select different text and submit again -- without waiting for the first response
   2. Each comment appears as a Word comment attached to the exact text that was selected when the request was made, even though the user has since moved the cursor elsewhere
   3. UI displays a count of in-flight comment requests that updates in real time as requests complete
-  4. When both Amendment and Comment prompts are active, selecting text and submitting applies tracked changes first then fires the comment request asynchronously
+  4. When both Amendment and Comment prompts are active on same selection, amendment executes first, then comment fires async
   5. Comment features are gracefully hidden on Word versions that lack WordApi 1.4 support, with no errors or broken UI
 
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — TDD: CommentQueue module with state management, bookmark helpers, and CMNT-11 spike
-- [ ] 03-02-PLAN.md — Status bar UI, WordApi 1.4 detection, and addLogWithRetry extension
-- [ ] 03-03-PLAN.md — Integration: wire comment queue + LLM client + prompt system into fire-and-forget workflow
+- [x] 03-01-PLAN.md — TDD: CommentQueue module with state management, bookmark helpers, and CMNT-11 spike
+- [x] 03-02-PLAN.md — Status bar UI, WordApi 1.4 detection, and addLogWithRetry extension
+- [x] 03-03-PLAN.md — Integration: wire comment queue + LLM client + prompt system into fire-and-forget workflow
 
 ### Phase 4: Document Comment Summary
 **Goal**: Users can extract all document comments with associated text, send to LLM with a configurable summary prompt, and export formatted analysis as a new Word document with cross-referenced annex
@@ -88,11 +88,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Extend PromptManager with summary category, mode logic, and composeSummaryMessages
-- [ ] 04-02-PLAN.md — Comment extractor and document generator modules with tests
-- [ ] 04-03-PLAN.md — UI wiring: Summary tab, mode switching, button relabel, and summary workflow integration
-- [ ] 04-04-PLAN.md — Structured document extraction with richness levels, max length, and live token estimation display
-- [ ] 04-05-PLAN.md — Tracked changes extraction via OOXML-only parsing (body.getOoxml + DOMParser) and {tracked changes} placeholder
+- [x] 04-01-PLAN.md — Extend PromptManager with summary category, mode logic, and composeSummaryMessages
+- [x] 04-02-PLAN.md — Comment extractor and document generator modules with tests
+- [x] 04-03-PLAN.md — UI wiring: Summary tab, mode switching, button relabel, and summary workflow integration
+- [x] 04-04-PLAN.md — Structured document extraction with richness levels and live token estimation display
+- [x] 04-05-PLAN.md — Tracked changes extraction via OOXML-only parsing (body.getOoxml + DOMParser) and {tracked changes} placeholder
 
 ## Progress
 
@@ -101,7 +101,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. LLM Client + vLLM Backend | 2/2 | Complete   | 2026-03-10 |
-| 2. Three-Category Prompt System | 2/3 | In Progress|  |
-| 3. Async Comment Queue | 0/3 | Planning complete | - |
-| 4. Document Comment Summary | 0/5 | Planning complete | - |
+| 1. LLM Client + vLLM Backend | 2/2 | Complete | 2026-03-10 |
+| 2. Three-Category Prompt System | 3/3 | Complete | 2026-03-11 |
+| 3. Async Comment Queue | 3/3 | Complete | 2026-03-12 |
+| 4. Document Comment Summary | 5/5 | Complete | 2026-03-15 |
