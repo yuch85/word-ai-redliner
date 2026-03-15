@@ -163,6 +163,20 @@ describe('buildSummaryHtml markdown conversion', () => {
         const html = buildSummaryHtml(summaryText, sampleComments);
         expect(html).toContain(summaryText);
     });
+
+    test('adds inline border styles to markdown tables for Word rendering', () => {
+        const tableMarkdown = '| Header 1 | Header 2 |\n|---|---|\n| Cell A | Cell B |';
+        const html = buildSummaryHtml(tableMarkdown, sampleComments);
+        expect(html).toContain('border-collapse: collapse');
+        expect(html).toContain('<th style="border: 1px solid #999');
+        expect(html).toContain('<td style="border: 1px solid #999');
+    });
+
+    test('table header cells get background color for visual distinction', () => {
+        const tableMarkdown = '| Name | Value |\n|---|---|\n| A | 1 |';
+        const html = buildSummaryHtml(tableMarkdown, sampleComments);
+        expect(html).toContain('background-color: #f2f2f2');
+    });
 });
 
 // ============================================================================
