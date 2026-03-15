@@ -290,22 +290,13 @@ describe('extractDocumentText', () => {
         expect(result).toBe('');
     });
 
-    test('truncates text longer than 50000 characters with "..."', async () => {
-        mockBodyText = 'X'.repeat(60000);
+    test('returns full text without truncation regardless of length', async () => {
+        mockBodyText = 'X'.repeat(100000);
 
         const result = await extractDocumentText();
 
-        expect(result.length).toBe(50003); // 50000 + "..."
-        expect(result).toBe('X'.repeat(50000) + '...');
-    });
-
-    test('does not truncate text at exactly 50000 characters', async () => {
-        mockBodyText = 'Y'.repeat(50000);
-
-        const result = await extractDocumentText();
-
-        expect(result.length).toBe(50000);
-        expect(result).toBe('Y'.repeat(50000));
+        expect(result.length).toBe(100000);
+        expect(result).toBe('X'.repeat(100000));
     });
 
     test('calls body.load with text property', async () => {
@@ -400,14 +391,15 @@ describe('extractDocumentStructured', () => {
             expect(result).toBe('');
         });
 
-        test('truncates at maxLength with "... [truncated]" suffix', async () => {
+        test('returns full text without truncation regardless of length', async () => {
             mockParagraphs = [
-                createMockParagraph('A'.repeat(60000))
+                createMockParagraph('A'.repeat(100000))
             ];
 
-            const result = await extractDocumentStructured({ richness: 'plain', maxLength: 100 });
+            const result = await extractDocumentStructured({ richness: 'plain' });
 
-            expect(result).toBe('A'.repeat(100) + '... [truncated]');
+            expect(result.length).toBe(100000);
+            expect(result).toBe('A'.repeat(100000));
         });
 
         test('skips empty paragraphs', async () => {
@@ -570,7 +562,7 @@ describe('extractDocumentStructured', () => {
     // --- defaults ---
 
     describe('defaults', () => {
-        test('no args defaults to richness=plain, maxLength=50000', async () => {
+        test('no args defaults to richness=plain', async () => {
             mockParagraphs = [
                 createMockParagraph('Hello world', 'Normal')
             ];
@@ -580,51 +572,52 @@ describe('extractDocumentStructured', () => {
             expect(result).toBe('Hello world');
         });
 
-        test('only richness provided, maxLength defaults to 50000', async () => {
-            mockParagraphs = [
-                createMockParagraph('X'.repeat(60000), 'Normal')
-            ];
-
-            const result = await extractDocumentStructured({ richness: 'plain' });
-
-            // Should be truncated at 50000
-            expect(result.length).toBe(50000 + '... [truncated]'.length);
-        });
-
-        test('only maxLength provided, richness defaults to plain', async () => {
+        test('richness defaults to plain when not specified (heading styles ignored)', async () => {
             mockParagraphs = [
                 createMockParagraph('Simple text', 'Heading1')
             ];
 
-            // With richness=plain, heading styles are ignored
-            const result = await extractDocumentStructured({ maxLength: 10000 });
+            // With richness=plain (default), heading styles are ignored
+            const result = await extractDocumentStructured({});
 
             expect(result).toBe('Simple text');
         });
+
+        test('returns full text without truncation regardless of length', async () => {
+            mockParagraphs = [
+                createMockParagraph('X'.repeat(100000), 'Normal')
+            ];
+
+            const result = await extractDocumentStructured({ richness: 'plain' });
+
+            // No truncation -- full text returned
+            expect(result.length).toBe(100000);
+        });
     });
 
-    // --- truncation ---
+    // --- no truncation ---
 
-    describe('truncation', () => {
-        test('output longer than maxLength is truncated with "... [truncated]"', async () => {
+    describe('no truncation', () => {
+        test('large document text is returned in full without any cap', async () => {
             mockParagraphs = [
                 createMockParagraph('A'.repeat(200), 'Normal')
             ];
 
-            const result = await extractDocumentStructured({ richness: 'plain', maxLength: 50 });
+            const result = await extractDocumentStructured({ richness: 'plain' });
 
-            expect(result).toBe('A'.repeat(50) + '... [truncated]');
-            expect(result.length).toBe(50 + '... [truncated]'.length);
+            expect(result).toBe('A'.repeat(200));
+            expect(result.length).toBe(200);
         });
 
-        test('output exactly at maxLength is not truncated', async () => {
+        test('ignores unknown options without error', async () => {
             mockParagraphs = [
-                createMockParagraph('A'.repeat(100), 'Normal')
+                createMockParagraph('text', 'Normal')
             ];
 
-            const result = await extractDocumentStructured({ richness: 'plain', maxLength: 100 });
+            // maxLength is no longer a valid option -- should be silently ignored
+            const result = await extractDocumentStructured({ richness: 'plain', maxLength: 10 });
 
-            expect(result).toBe('A'.repeat(100));
+            expect(result).toBe('text');
         });
     });
 
