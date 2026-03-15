@@ -11,8 +11,6 @@
  */
 
 const MAX_ASSOCIATED_TEXT_LENGTH = 500;
-const MAX_DOCUMENT_TEXT_LENGTH = 50000;
-const DEFAULT_MAX_LENGTH = 50000;
 
 // OOXML namespace constants
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -297,8 +295,7 @@ export async function extractAllComments() {
 
 /**
  * Extracts the full document body as plain text.
- * Returns the text content of the active document's body, truncated
- * to MAX_DOCUMENT_TEXT_LENGTH characters if necessary.
+ * Returns the complete text content of the active document's body.
  *
  * @returns {Promise<string>} The document body text
  */
@@ -309,9 +306,6 @@ export async function extractDocumentText() {
         body.load('text');
         await context.sync();
         text = body.text || '';
-        if (text.length > MAX_DOCUMENT_TEXT_LENGTH) {
-            text = text.substring(0, MAX_DOCUMENT_TEXT_LENGTH) + '...';
-        }
     });
     return text;
 }
@@ -343,7 +337,8 @@ export function estimateTokenCount(text) {
 }
 
 /**
- * Extracts document text with configurable richness and max length.
+ * Extracts document text with configurable richness level.
+ * Returns the full document text without any length cap.
  *
  * Richness levels:
  * - 'plain': Raw body text concatenated from paragraphs (fastest, smallest)
@@ -354,12 +349,10 @@ export function estimateTokenCount(text) {
  *
  * @param {object} [options]
  * @param {'plain'|'headings'|'structured'} [options.richness='plain'] - Detail level
- * @param {number} [options.maxLength=50000] - Max output characters
  * @returns {Promise<string>} Formatted document text
  */
 export async function extractDocumentStructured(options = {}) {
     const richness = options.richness || 'plain';
-    const maxLength = options.maxLength ?? DEFAULT_MAX_LENGTH;
     let result = '';
 
     await Word.run(async (context) => {
@@ -425,11 +418,6 @@ export async function extractDocumentStructured(options = {}) {
 
         result = lines.join('\n');
     });
-
-    // Truncate if needed
-    if (result.length > maxLength) {
-        result = result.substring(0, maxLength) + '... [truncated]';
-    }
 
     return result;
 }

@@ -16,8 +16,7 @@ let config = {
     trackChangesEnabled: true,
     lineDiffEnabled: false,
     docExtraction: {
-        richness: 'plain',
-        maxLength: 50000
+        richness: 'plain'
     },
     trackedChangesExtraction: false,
     backends: {
@@ -49,6 +48,11 @@ let isProcessing = false;
 let supportsComments = false;  // Set during initialize() via WordApi 1.4 check
 const commentQueue = new CommentQueue(addLog);
 
+// Token estimate cache -- avoids repeated Word API calls
+let _tokenEstimateCache = { docCharCount: null, commentCount: null };
+let _tokenEstimateDirty = true;  // Set true to trigger Word API re-read
+let _tokenEstimateTimer = null;  // Debounce timer
+
 Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
         initialize();
@@ -64,11 +68,20 @@ function initialize() {
 
     // Setup event listeners -- general
     document.getElementById("reviewBtn").onclick = handleReviewSelection;
-    document.getElementById("saveSettingsBtn").onclick = saveSettings;
     document.getElementById("clearLogsBtn").onclick = clearLogs;
     document.getElementById("settingsToggle").onclick = toggleSettings;
     document.getElementById("runVerificationBtn").onclick = runVerification;
     document.getElementById("backendSelect").onchange = handleBackendSwitch;
+
+    // Auto-save settings on every change (no Save button needed)
+    document.getElementById("backendSelect").addEventListener('change', saveSettings);
+    document.getElementById("modelSelect").addEventListener('change', saveSettings);
+    document.getElementById("endpointUrl").addEventListener('input', saveSettings);
+    document.getElementById("apiKey").addEventListener('input', saveSettings);
+    document.getElementById("trackChangesCheckbox").addEventListener('change', saveSettings);
+    document.getElementById("lineDiffCheckbox").addEventListener('change', saveSettings);
+    document.getElementById("docRichnessSelect").addEventListener('change', saveSettings);
+    document.getElementById("trackedChangesExtraction").addEventListener('change', saveSettings);
 
     // Tab bar -- click and keyboard navigation
     for (const category of CATEGORIES) {
@@ -202,7 +215,11 @@ function loadSettings() {
 
             // Ensure docExtraction defaults exist (for configs saved before this feature)
             if (!config.docExtraction) {
-                config.docExtraction = { richness: 'plain', maxLength: 50000 };
+                config.docExtraction = { richness: 'plain' };
+            }
+            // Clean up legacy maxLength from older configs
+            if (config.docExtraction.maxLength !== undefined) {
+                delete config.docExtraction.maxLength;
             }
 
             // Ensure trackedChangesExtraction default (for configs saved before this feature)
@@ -233,14 +250,14 @@ function saveSettings() {
     config.trackChangesEnabled = trackChanges;
     config.lineDiffEnabled = lineDiff;
     config.docExtraction = {
-        richness: document.getElementById('docRichnessSelect').value,
-        maxLength: parseInt(document.getElementById('docMaxLength').value, 10) || 50000
+        richness: document.getElementById('docRichnessSelect').value
     };
     config.trackedChangesExtraction = document.getElementById('trackedChangesExtraction').checked;
 
     try {
         localStorage.setItem('wordAI.config', JSON.stringify(config));
         addLog("Settings saved.", "success");
+        invalidateTokenEstimateCache();
         updateTokenEstimate();
 
         // Re-test connection with new settings
@@ -276,10 +293,6 @@ function updateUIFromConfig() {
     const richnessSelect = document.getElementById('docRichnessSelect');
     if (richnessSelect && config.docExtraction) {
         richnessSelect.value = config.docExtraction.richness || 'plain';
-    }
-    const maxLengthInput = document.getElementById('docMaxLength');
-    if (maxLengthInput && config.docExtraction) {
-        maxLengthInput.value = config.docExtraction.maxLength || 50000;
     }
 
     const trackedChangesCheckbox = document.getElementById('trackedChangesExtraction');
@@ -436,6 +449,10 @@ function switchTab(category) {
     newTextarea.value = unsavedText[category];
 
     updateTabDisabledState();
+
+    // Invalidate token estimate cache on tab switch -- document may have changed
+    invalidateTokenEstimateCache();
+    updateTokenEstimate();
 }
 
 /**
@@ -550,15 +567,88 @@ function updateReviewButton() {
 }
 
 /**
+ * Invalidates the token estimate cache, causing the next
+ * updateTokenEstimate() call to re-read from the Word API.
+ */
+function invalidateTokenEstimateCache() {
+    _tokenEstimateDirty = true;
+}
+
+/**
+ * Reads document size metrics from Word API for token estimation.
+ * Cached: only calls Word API when _tokenEstimateDirty is true.
+ * Returns cached values on subsequent calls until invalidated.
+ *
+ * @param {object} options - Which metrics are needed
+ * @param {boolean} options.needDocText - Whether to read body.text length
+ * @param {boolean} options.needComments - Whether to count comments
+ * @returns {Promise<{docCharCount: number|null, commentCount: number|null}>}
+ */
+async function getDocumentMetrics({ needDocText, needComments }) {
+    const docCached = !needDocText || _tokenEstimateCache.docCharCount !== null;
+    const commentsCached = !needComments || _tokenEstimateCache.commentCount !== null;
+    if (!_tokenEstimateDirty && docCached && commentsCached) {
+        return _tokenEstimateCache;
+    }
+
+    try {
+        await Word.run(async (context) => {
+            const body = context.document.body;
+
+            // Read body text length if needed
+            if (needDocText) {
+                body.load('text');
+            }
+
+            // Read comment count if needed
+            let commentCollection = null;
+            if (needComments && supportsComments) {
+                commentCollection = body.getComments();
+                commentCollection.load('items');
+            }
+
+            await context.sync();
+
+            if (needDocText) {
+                _tokenEstimateCache.docCharCount = (body.text || '').length;
+            }
+            if (needComments && supportsComments && commentCollection) {
+                _tokenEstimateCache.commentCount = commentCollection.items.length;
+            }
+        });
+        _tokenEstimateDirty = false;
+    } catch (e) {
+        // Word API unavailable (e.g., test environment) -- leave cache as null
+        console.warn('Token estimate: Word API unavailable, using prompt-only estimate', e);
+    }
+
+    return _tokenEstimateCache;
+}
+
+/**
  * Updates the token estimation display with current prompt and data sizes.
+ * Reads actual document size from Word API (cached + debounced) to show
+ * realistic token estimates including document text and comments.
+ *
  * Shows estimated total tokens across: active context prompt + active
- * category prompt (amendment/comment/summary) + data caps (maxLength for
- * document text when {whole document} is used).
+ * category prompt (amendment/comment/summary) + document text + comments.
  *
  * Uses estimateTokenCount (Math.ceil(text.length / 4)) heuristic.
  * Informational only -- helps users gauge LLM context window fit.
+ *
+ * Async: callers fire-and-forget. DOM is updated when data is ready.
  */
-function updateTokenEstimate() {
+async function updateTokenEstimate() {
+    // Debounce: cancel pending call, schedule new one after 300ms
+    if (_tokenEstimateTimer) {
+        clearTimeout(_tokenEstimateTimer);
+    }
+
+    await new Promise((resolve) => {
+        _tokenEstimateTimer = setTimeout(resolve, 300);
+    });
+    _tokenEstimateTimer = null;
+
     const container = document.getElementById('tokenEstimate');
     const valueEl = document.getElementById('tokenEstimateValue');
     const breakdownEl = document.getElementById('tokenEstimateBreakdown');
@@ -572,39 +662,34 @@ function updateTokenEstimate() {
 
     let totalTokens = 0;
     const parts = [];
+    let needDocText = false;
+    let needComments = false;
+    let hasTrackedChanges = false;
 
     // Context prompt tokens (always included if active)
     const contextPrompt = promptManager.getActivePrompt('context');
     if (contextPrompt && contextPrompt.template) {
         const ctxTokens = estimateTokenCount(contextPrompt.template);
         totalTokens += ctxTokens;
-        parts.push(`ctx:~${ctxTokens}`);
+        parts.push(`ctx:~${ctxTokens.toLocaleString()}`);
     }
 
     if (mode === 'summary') {
-        // Summary mode: summary prompt + data caps
+        // Summary mode: summary prompt + actual document data estimates
         const summaryPrompt = promptManager.getActivePrompt('summary');
         if (summaryPrompt && summaryPrompt.template) {
             const summTokens = estimateTokenCount(summaryPrompt.template);
             totalTokens += summTokens;
-            parts.push(`prompt:~${summTokens}`);
+            parts.push(`prompt:~${summTokens.toLocaleString()}`);
 
-            // If prompt uses {whole document}, add max document text cap
             if (summaryPrompt.template.includes('{whole document}')) {
-                const maxLen = (config.docExtraction && config.docExtraction.maxLength) || 50000;
-                const docTokensCap = estimateTokenCount('x'.repeat(maxLen));
-                totalTokens += docTokensCap;
-                parts.push(`doc:up to ~${docTokensCap}`);
+                needDocText = true;
             }
-
-            // Comments data is variable (depends on document), show as note
             if (summaryPrompt.template.includes('{comments}')) {
-                parts.push(`+comments`);
+                needComments = true;
             }
-
-            // If prompt uses {tracked changes} and extraction is enabled, add estimate
             if (config.trackedChangesExtraction && summaryPrompt.template.includes('{tracked changes}')) {
-                parts.push('+tracked changes');
+                hasTrackedChanges = true;
             }
         }
     } else {
@@ -615,11 +700,39 @@ function updateTokenEstimate() {
             if (prompt && prompt.template) {
                 const catTokens = estimateTokenCount(prompt.template);
                 totalTokens += catTokens;
-                parts.push(`${cat.substring(0, 5)}:~${catTokens}`);
+                parts.push(`${cat.substring(0, 5)}:~${catTokens.toLocaleString()}`);
             }
         }
-        // Selection text is variable, show as note
+        // Selection text is variable and unknown until user selects -- show note
         parts.push('+selection');
+    }
+
+    // Fetch real document metrics from Word API (cached + debounced)
+    if (needDocText || needComments) {
+        const metrics = await getDocumentMetrics({ needDocText, needComments });
+
+        if (needDocText && metrics.docCharCount !== null) {
+            const docTokens = Math.ceil(metrics.docCharCount / 4);
+            totalTokens += docTokens;
+            parts.push(`doc:~${docTokens.toLocaleString()}`);
+        } else if (needDocText) {
+            // Word API failed -- show note instead of number
+            parts.push('+doc text');
+        }
+
+        if (needComments && metrics.commentCount !== null) {
+            // Estimate ~50 tokens per comment (author + text + associated text)
+            const commentTokens = metrics.commentCount * 50;
+            totalTokens += commentTokens;
+            parts.push(`comments:~${commentTokens.toLocaleString()}`);
+        } else if (needComments) {
+            parts.push('+comments');
+        }
+    }
+
+    // Tracked changes: can't cheaply estimate OOXML parsing cost, show note
+    if (hasTrackedChanges) {
+        parts.push('+tracked changes');
     }
 
     container.style.display = 'flex';
@@ -881,9 +994,9 @@ async function handleSummaryGeneration() {
         if (activeSummaryPrompt && activeSummaryPrompt.template.includes('{whole document}')) {
             const extraction = config.docExtraction || {};
             const richness = extraction.richness || 'plain';
-            const maxLength = extraction.maxLength || 50000;
-            addLog(`Extracting document text (${richness}, max ${maxLength} chars)...`, 'info');
-            summaryOpts.documentText = await extractDocumentStructured({ richness, maxLength });
+            addLog(`Extracting document text (${richness})...`, 'info');
+            summaryOpts.documentText = await extractDocumentStructured({ richness });
+            addLog(`Document text extracted (${summaryOpts.documentText.length} chars, ~${estimateTokenCount(summaryOpts.documentText)} tokens)`, 'info');
         }
 
         // 3. Extract tracked changes if enabled and summary prompt uses {tracked changes} placeholder
