@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 Phase: 4 of 4 (Document Comment Summary)
 Plan: 5 of 5 in current phase (COMPLETE)
 Status: Phase Complete
-Last activity: 2026-03-14 - Completed plan 04-05: Tracked changes extraction via OOXML parsing
+Last activity: 2026-03-15 - Completed quick task 3: Summary UX fixes (placeholder text, settings scoping, table borders)
 
 Progress: [██████████] 100%
 
@@ -123,9 +123,10 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 1 | Save button updates existing prompt, New Prompt dropdown option for creating new prompts | 2026-03-12 | 63eefa3 | [1-save-button-updates-existing-prompt-new-](./quick/1-save-button-updates-existing-prompt-new-/) |
 | 2 | Add marked library to convert LLM markdown to HTML in buildSummaryHtml | 2026-03-14 | 3457b7c | [2-add-marked-library-to-convert-llm-markdo](./quick/2-add-marked-library-to-convert-llm-markdo/) |
+| 3 | Summary UX fixes: placeholder text, settings scoping, table borders | 2026-03-15 | 28112d1 | [3-summary-ux-fixes-placeholder-text-settin](./quick/3-summary-ux-fixes-placeholder-text-settin/) |
 
 ## Session Continuity
 
-Last session: 2026-03-14T17:02:00.000Z
+Last session: 2026-03-15T06:58:46.503Z
 Stopped at: Completed 04-05-PLAN.md (tracked changes extraction via OOXML parsing)
 Resume file: None
