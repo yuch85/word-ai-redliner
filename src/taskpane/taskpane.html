@@ -107,7 +107,7 @@
                 </div>
                 <div class="form-group">
                     <textarea id="promptTextarea-summary" class="form-control" rows="6"
-                        placeholder="Enter summary prompt. Use {comments} to include extracted comment data. The LLM should output HTML."></textarea>
+                        placeholder="Enter summary prompt. Available placeholders:&#10;  {comments} — extracted comment data&#10;  {whole document} — full document text (richness controlled in Settings)&#10;  {tracked changes} — tracked changes data (enable in Settings)&#10;&#10;The LLM should output markdown (converted to HTML automatically)."></textarea>
                 </div>
                 <div class="button-group compact-toolbar">
                     <button id="savePromptBtn-summary" class="btn btn-compact">Save</button>
@@ -178,6 +178,7 @@
                     </label>
                 </div>
                 <hr class="settings-divider">
+                <p class="settings-section-label">Summary Mode Settings</p>
                 <div class="form-group">
                     <label for="docRichnessSelect">Document Extraction Richness:</label>
                     <select id="docRichnessSelect" class="form-control">
@@ -185,7 +186,7 @@
                         <option value="headings">Headings + text</option>
                         <option value="structured">Full structure (headings, lists)</option>
                     </select>
-                    <small class="help-text">Detail level for {whole document} placeholder in Summary prompts</small>
+                    <small class="help-text">Controls {whole document} placeholder detail level</small>
                 </div>
                 <div class="form-group">
                     <label for="docMaxLength">Max Document Length (chars):</label>
@@ -197,7 +198,7 @@
                         <input type="checkbox" id="trackedChangesExtraction">
                         Include Tracked Changes in Summary
                     </label>
-                    <small class="help-text">Extracts tracked changes (via OOXML) and includes them in the {tracked changes} placeholder</small>
+                    <small class="help-text">Extracts tracked changes (via OOXML) for {tracked changes} placeholder</small>
                 </div>
                 <button id="saveSettingsBtn" class="btn btn-secondary full-width">💾 Save Settings</button>
             </div>

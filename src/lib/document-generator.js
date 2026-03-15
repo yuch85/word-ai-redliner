@@ -49,7 +49,14 @@ export function buildSummaryHtml(summaryText, extractedComments, title = 'Commen
     let html = `<h1>${escapeHtml(title)}</h1>`;
 
     // Summary section (LLM markdown output converted to HTML)
-    html += marked.parse(summaryText);
+    // Add inline border styles to tables — Word's insertHtml renders tables
+    // without borders by default, making them invisible in the output document.
+    let summaryHtml = marked.parse(summaryText);
+    summaryHtml = summaryHtml
+        .replace(/<table>/g, '<table style="border-collapse: collapse; width: 100%;">')
+        .replace(/<th(?=[ >])/g, '<th style="border: 1px solid #999; padding: 6px 10px; background-color: #f2f2f2; font-weight: bold; text-align: left;"')
+        .replace(/<td(?=[ >])/g, '<td style="border: 1px solid #999; padding: 6px 10px;"');
+    html += summaryHtml;
 
     // Separator
     html += '<hr/>';
