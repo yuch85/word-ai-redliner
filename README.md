@@ -1,7 +1,8 @@
 # Word AI Redliner
 
 AI-powered Microsoft Word add-in that applies word-level tracked changes using
-a structure-aware diff strategy.
+a structure-aware diff strategy — plus document summarization with comment
+extraction and tracked changes analysis.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=0Oa05jk3wrU">
@@ -13,9 +14,63 @@ a structure-aware diff strategy.
 
 ## Features
 
-- Word-level diffs with tracked changes
-- Token map strategy with sentence fallback
-- Prompt management for custom review templates
+### Core: AI Redlining (v0.1.0)
+- Word-level diffs with tracked changes via [office-word-diff](https://github.com/niclasgrunworked/office-word-diff)
+- Token map strategy with sentence fallback, block replace as last resort
+- Configurable LLM backends: Ollama and vLLM (OpenAI-compatible)
+
+### v0.2.0: Prompt System + Document Summary
+
+**Three-Category Prompt System**
+- Context, Amendment, and Comment prompt categories with dedicated tabs
+- Full CRUD: create, save, update, delete prompts per category
+- Per-category activation with `{selection}` placeholder replacement
+- Prompts persist in localStorage across sessions
+
+**Document Comment Summary**
+- 4th "Summary" tab — extract all document comments, send to LLM, generate a formatted Word document
+- `{comments}` placeholder inserts structured comment data (author, annotated text, comment text)
+- `{whole document}` placeholder extracts full document text with configurable richness:
+  - **Plain** — raw paragraph text
+  - **Headings** — markdown-style heading markers (`## Section Title`)
+  - **Structured** — headings + list item numbering and indentation
+- `{tracked changes}` placeholder extracts revision marks via OOXML parsing (w:ins, w:del, w:moveFrom, w:moveTo)
+- Generated summary document includes annex with numbered source comments
+- LLM markdown output auto-converted to HTML via [marked](https://github.com/markedjs/marked)
+- Tables in generated documents render with visible borders
+
+**Tracked Changes Extraction (OOXML)**
+- Parses `body.getOoxml()` with browser DOMParser — no external dependencies
+- Handles `pkg:package` wrapper, `w:proofErr` normalization
+- Pairs adjacent `w:del` + `w:ins` from same author as replacements
+- Detects move operations (`w:moveFrom` / `w:moveTo`)
+- Skips table row revision markers (`w:ins`/`w:del` inside `w:trPr`)
+- Namespace-aware querying with prefix fallback for cross-browser compatibility
+- Author identity prominently included in LLM-formatted output
+
+**Async Comment Queue**
+- Bookmark-based range persistence for async comment insertion
+- Comment status bar with pending count and retry-on-error
+- WordApi 1.4 detection with graceful degradation
+
+**Settings & UX**
+- Settings auto-save on every change (no Save button)
+- Live token estimation with real document metrics (async Word API read, cached, debounced)
+- Document extraction richness dropdown (Summary mode only)
+- Tracked changes extraction toggle (Summary mode only)
+- Mode switching: Amendment/Comment tabs disabled when Summary is active
+- Review button relabels to "Generate Summary" in Summary mode
+
+**Backend Selector**
+- Ollama and vLLM backends with unified OpenAI-compatible API
+- Model dropdown auto-populated from backend `/v1/models` endpoint
+- Configurable endpoint URL and optional API key
+- Track Changes and Line Diff toggles
+
+**Testing**
+- 230 unit tests across 7 test suites (Jest)
+- TDD workflow: failing tests written before implementation
+- Covers: prompt state/persistence/composition, comment extraction, document generation, tracked changes OOXML parsing
 
 ## Setup
 
@@ -286,7 +341,7 @@ settings UI; those overrides persist in localStorage.
 Pre-built images are available on GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/yuch85/word-ai-redliner:0.1.0
+docker pull ghcr.io/yuch85/word-ai-redliner:0.2.0
 docker pull ghcr.io/yuch85/word-ai-redliner:latest
 ```
 
@@ -296,6 +351,22 @@ docker pull ghcr.io/yuch85/word-ai-redliner:latest
 
 See `ARCHITECTURE.md` for details.
 
+## Testing
+
+```bash
+npx jest --no-coverage    # 230 tests across 7 suites
+npx webpack --mode development   # verify build
+```
+
+Test suites cover:
+- `prompt-state.spec.js` — PromptManager CRUD, activation, persistence, summary category
+- `prompt-persistence.spec.js` — localStorage round-trip, migration, edge cases
+- `prompt-composition.spec.js` — composeMessages, composeSummaryMessages, placeholder replacement
+- `comment-extractor.spec.js` — extractAllComments, extractDocumentStructured, estimateTokenCount, extractTrackedChanges (OOXML parsing)
+- `document-generator.spec.js` — buildSummaryHtml (markdown conversion, table borders, escaping), createSummaryDocument (Word API)
+- `comment-queue.spec.js` — CommentQueue state management, bookmark naming
+- `llm-client.spec.js` — sendPrompt, stripThinkTags, testConnection
+
 ## Licensing
 
 This project is dual-licensed:
@@ -304,9 +375,3 @@ This project is dual-licensed:
 - **Apache 2.0 License** applies to the `office-word-diff` library (used as a dependency).
 
 See `LICENSE` and `LICENSE-APACHE` for details.
-
-## Testing
-
-The previous test suite referenced modules that are not present in the current
-minimal codebase. The test directory is left empty and ready for new tests once
-refactoring is complete.
