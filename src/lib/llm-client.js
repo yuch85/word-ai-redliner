@@ -54,6 +54,21 @@ export function stripThinkTags(text, log) {
 }
 
 /**
+ * Private helper to build the request URL and headers for chat completions.
+ *
+ * @param {object} config - Backend configuration
+ * @returns {{ url: string, headers: object }}
+ */
+function buildRequestConfig(config) {
+  const url = config.url.replace(/\/+$/, '') + '/v1/chat/completions';
+  const headers = { 'Content-Type': 'application/json' };
+  if (config.apiKey) {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+  }
+  return { url, headers };
+}
+
+/**
  * Sends a prompt to the configured LLM backend.
  * Uses OpenAI-compatible /v1/chat/completions format for both Ollama and vLLM.
  *
@@ -67,12 +82,7 @@ export function stripThinkTags(text, log) {
  * @throws {Error} On non-ok HTTP response or network failure
  */
 export async function sendPrompt(config, promptText, log) {
-  const url = config.url.replace(/\/+$/, '') + '/v1/chat/completions';
-
-  const headers = { 'Content-Type': 'application/json' };
-  if (config.apiKey) {
-    headers['Authorization'] = `Bearer ${config.apiKey}`;
-  }
+  const { url, headers } = buildRequestConfig(config);
 
   const body = JSON.stringify({
     model: config.model,
@@ -100,6 +110,69 @@ export async function sendPrompt(config, promptText, log) {
     return stripThinkTags(rawText, log);
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Sends a messages array to the LLM backend, preserving system/user roles.
+ * Unlike sendPrompt (single string), this sends the messages array directly
+ * to the chat completions API without wrapping in a single user message.
+ *
+ * Uses a manual AbortController approach instead of AbortSignal.any() for
+ * compatibility with Office's WebView2 runtime.
+ *
+ * @param {Object} config - { url, apiKey, model }
+ * @param {Array<{role: string, content: string}>} messages - Chat messages
+ * @param {function} [log] - Optional logging callback (message, type)
+ * @param {AbortSignal} [signal] - Optional abort signal for cancellation
+ * @param {number} [timeoutMs=30000] - Per-request timeout in ms
+ * @returns {Promise<string>} Cleaned LLM response text
+ * @throws {Error} On non-ok HTTP response, network failure, or abort
+ */
+export async function sendMessages(config, messages, log, signal, timeoutMs = 30000) {
+  const { url, headers } = buildRequestConfig(config);
+
+  const body = JSON.stringify({
+    model: config.model,
+    messages: messages,
+    stream: false,
+  });
+
+  // Create a local AbortController for timeout management
+  const localController = new AbortController();
+  const timeoutId = setTimeout(() => localController.abort(), timeoutMs);
+
+  // Wire external signal to trigger local abort (WebView2-safe, no AbortSignal.any)
+  let onExternalAbort;
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(timeoutId);
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    onExternalAbort = () => localController.abort();
+    signal.addEventListener('abort', onExternalAbort);
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
+      signal: localController.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const rawText = data.choices?.[0]?.message?.content ?? '';
+    return stripThinkTags(rawText, log);
+  } finally {
+    clearTimeout(timeoutId);
+    if (signal && onExternalAbort) {
+      signal.removeEventListener('abort', onExternalAbort);
+    }
   }
 }
 
