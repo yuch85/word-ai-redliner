@@ -143,6 +143,17 @@
                 title="Select an Amendment or Comment prompt to enable">
                 Review Selection
             </button>
+            <button id="processDocBtn" class="btn btn-primary full-width process-doc-btn" disabled
+                title="Process entire document with active prompts">
+                Process Document
+            </button>
+            <!-- Process Document Progress Bar -->
+            <div id="processProgressBar" class="process-progress-bar" style="display: none;">
+                <div class="progress-track">
+                    <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                </div>
+                <span id="progressText" class="progress-text">Processing: 0/0 chunks</span>
+            </div>
         </section>
 
         <!-- Settings Section -->
@@ -203,6 +214,17 @@
                         Include Tracked Changes in Summary
                     </label>
                     <small class="help-text">Extracts tracked changes (via OOXML) for {tracked changes} placeholder</small>
+                </div>
+                <hr class="settings-divider">
+                <p class="settings-section-label">Whole-Document Processing Settings</p>
+                <div class="form-group">
+                    <label for="commentGranularity">Comment granularity:</label>
+                    <select id="commentGranularity" class="form-control">
+                        <option value="0">Per chunk</option>
+                        <option value="1">Every paragraph</option>
+                        <option value="2">Every 2 paragraphs</option>
+                        <option value="5">Every 5 paragraphs</option>
+                    </select>
                 </div>
             </div>
         </section>
