@@ -9,6 +9,7 @@ import { CommentQueue } from '../lib/comment-queue.js';
 import { fireCommentRequest } from '../lib/comment-request.js';
 import { extractAllComments, extractDocumentText, extractDocumentStructured, estimateTokenCount, extractTrackedChanges } from '../lib/comment-extractor.js';
 import { createSummaryDocument, buildSummaryHtml } from '../lib/document-generator.js';
+import { parseDelimitedResponse, buildFallbackClassificationPrompt } from '../lib/response-parser.js';
 
 // Global configuration (defaults from env, overridable via UI/localStorage)
 let config = {
@@ -127,6 +128,9 @@ function initialize() {
     // Modal buttons
     document.getElementById("savePromptConfirmBtn").onclick = handleSavePromptConfirm;
     document.getElementById("savePromptCancelBtn").onclick = hideSavePromptModal;
+
+    // Comment instructions field (amendment tab) -- update button label as user types
+    document.getElementById('commentInstructions').addEventListener('input', updateReviewButton);
 
     // Initial UI state
     updateUIFromConfig();
@@ -541,18 +545,21 @@ function updateReviewButton() {
             btn.disabled = false;
             btn.title = 'Extract all comments and generate summary document';
             break;
-        case 'amendment':
-            btn.textContent = 'Amend Selection \u2192';
+        case 'amendment': {
+            const commentField = document.getElementById('commentInstructions');
+            const hasCommentInstructions = commentField && commentField.value.trim();
+            if (hasCommentInstructions) {
+                btn.textContent = 'Amend & Comment \u2192';
+                btn.title = 'Amendment + comment in single LLM call';
+            } else {
+                btn.textContent = 'Amend Selection \u2192';
+                btn.title = '';
+            }
             btn.disabled = false;
-            btn.title = '';
             break;
+        }
         case 'comment':
             btn.textContent = 'Comment on Selection \u2192';
-            btn.disabled = false;
-            btn.title = '';
-            break;
-        case 'both':
-            btn.textContent = 'Amend & Comment \u2192';
             btn.disabled = false;
             btn.title = '';
             break;
@@ -1115,7 +1122,7 @@ async function handleReviewSelection() {
 
     // Only block UI for amendment (synchronous) operations
     // Comment-only mode is non-blocking (fire-and-forget)
-    const needsBlocking = (activeMode === 'amendment' || activeMode === 'both');
+    const needsBlocking = (activeMode === 'amendment');
 
     try {
         if (needsBlocking) {
@@ -1139,57 +1146,24 @@ async function handleReviewSelection() {
         const activeBackend = getActiveBackendConfig();
         addLog(`Processing selection (${selectionText.length} chars) via ${activeBackend.model}...`, "info");
 
-        // 2. Compose and send prompt
-        // Amendment execution (existing synchronous workflow)
-        if (activeMode === 'amendment' || activeMode === 'both') {
-            const messages = promptManager.composeMessages(selectionText, 'amendment');
+        // 2. Amendment execution
+        if (activeMode === 'amendment') {
+            const commentInstructions = document.getElementById('commentInstructions').value.trim();
 
-            // Flatten messages into a single prompt for current sendPromptToLLM.
-            // Phase 1's unified client will accept messages[] directly.
-            // For now: system message (if any) prepended as context, user message is the prompt.
-            let fullPrompt;
-            if (messages.length === 2) {
-                // System + user message
-                fullPrompt = messages[0].content + '\n\n' + messages[1].content;
-            } else if (messages.length === 1) {
-                fullPrompt = messages[0].content;
+            if (commentInstructions) {
+                // Merged amendment + comment in single LLM call
+                await handleMergedAmendmentComment(selectionText, commentInstructions, activeBackend);
             } else {
-                throw new Error("No prompt composed -- check active prompts");
+                // Amendment-only (existing synchronous workflow)
+                await handleAmendmentOnly(selectionText, activeBackend);
             }
-
-            const backendConfig = getActiveBackendConfig();
-            const response = await sendPrompt(backendConfig, fullPrompt, addLog);
-
-            addLog(`LLM Response received [${backendConfig.model}]`, "success");
-            addLog(`Response: ${response.substring(0, 100)}${response.length > 100 ? '...' : ''}`, "info");
-
-            // 3. Apply Diff Logic
-            addLog("Applying changes...", "info");
-
-            await Word.run(async (context) => {
-                const selection = context.document.getSelection();
-                if (Word.ChangeTrackingMode) {
-                    context.document.changeTrackingMode = config.trackChangesEnabled
-                        ? Word.ChangeTrackingMode.trackAll
-                        : Word.ChangeTrackingMode.off;
-                }
-                if (config.lineDiffEnabled) {
-                    await applySentenceDiffStrategy(context, selection, selectionText, response, addLog);
-                } else {
-                    await applyTokenMapStrategy(context, selection, selectionText, response, addLog);
-                }
-            });
-
-            addLog("Changes applied successfully", "success");
         }
 
-        // Comment execution -- fire-and-forget via comment queue
-        // Comment prompt receives the ORIGINAL selectionText (not amended text)
-        if (activeMode === 'comment' || activeMode === 'both') {
+        // 3. Comment-only execution -- fire-and-forget via comment queue
+        if (activeMode === 'comment') {
             if (!supportsComments) {
                 addLog("Comment features require Word API 1.4", "warning");
             } else {
-                // Fire comment request asynchronously (NO await -- fire-and-forget)
                 const backendConfig = getActiveBackendConfig();
                 fireCommentRequest(selectionText, {
                     config: backendConfig,
@@ -1200,10 +1174,6 @@ async function handleReviewSelection() {
                     addLogWithRetryFn: addLogWithRetry,
                     updateStatusBarFn: updateCommentStatusBar
                 });
-
-                if (activeMode === 'both') {
-                    addLog('Amendment applied. Comment request fired...', 'info');
-                }
             }
         }
 
@@ -1215,6 +1185,144 @@ async function handleReviewSelection() {
             btn.classList.remove("loading");
             updateReviewButton();
         }
+    }
+}
+
+/**
+ * Handles amendment-only submission (no comment instructions).
+ * Sends amendment prompt to LLM and applies diff as tracked changes.
+ */
+async function handleAmendmentOnly(selectionText, activeBackend) {
+    const messages = promptManager.composeMessages(selectionText, 'amendment');
+
+    let fullPrompt;
+    if (messages.length === 2) {
+        fullPrompt = messages[0].content + '\n\n' + messages[1].content;
+    } else if (messages.length === 1) {
+        fullPrompt = messages[0].content;
+    } else {
+        throw new Error("No prompt composed -- check active prompts");
+    }
+
+    const backendConfig = getActiveBackendConfig();
+    const response = await sendPrompt(backendConfig, fullPrompt, addLog);
+
+    addLog(`LLM Response received [${backendConfig.model}]`, "success");
+    addLog(`Response: ${response.substring(0, 100)}${response.length > 100 ? '...' : ''}`, "info");
+
+    addLog("Applying changes...", "info");
+
+    await Word.run(async (context) => {
+        const selection = context.document.getSelection();
+        if (Word.ChangeTrackingMode) {
+            context.document.changeTrackingMode = config.trackChangesEnabled
+                ? Word.ChangeTrackingMode.trackAll
+                : Word.ChangeTrackingMode.off;
+        }
+        if (config.lineDiffEnabled) {
+            await applySentenceDiffStrategy(context, selection, selectionText, response, addLog);
+        } else {
+            await applyTokenMapStrategy(context, selection, selectionText, response, addLog);
+        }
+    });
+
+    addLog("Changes applied successfully", "success");
+}
+
+/**
+ * Handles merged amendment + comment submission.
+ * Sends a single merged prompt to LLM, parses delimited response,
+ * applies amendment as tracked changes and inserts comment on selection.
+ * Falls back to a second LLM call if delimiters are missing.
+ */
+async function handleMergedAmendmentComment(selectionText, commentInstructions, activeBackend) {
+    const messages = promptManager.composeMergedMessages(selectionText, commentInstructions);
+
+    let fullPrompt;
+    if (messages.length === 2) {
+        fullPrompt = messages[0].content + '\n\n' + messages[1].content;
+    } else if (messages.length === 1) {
+        fullPrompt = messages[0].content;
+    } else {
+        throw new Error("No prompt composed -- check active prompts");
+    }
+
+    const backendConfig = getActiveBackendConfig();
+    addLog(`Sending merged amendment + comment request [${backendConfig.model}]...`, "info");
+    const response = await sendPrompt(backendConfig, fullPrompt, addLog);
+
+    addLog(`LLM Response received [${backendConfig.model}]`, "success");
+    addLog(`Response: ${response.substring(0, 100)}${response.length > 100 ? '...' : ''}`, "info");
+
+    // Parse delimited response
+    let parsed = parseDelimitedResponse(response);
+
+    // Fallback: if delimiters not found, try a second LLM call to classify
+    if (parsed.amendment === null) {
+        addLog("Response missing delimiters, attempting to classify...", "info");
+        const fallbackMessages = buildFallbackClassificationPrompt(response, selectionText);
+        const fallbackPrompt = fallbackMessages[0].content + '\n\n' + fallbackMessages[1].content;
+
+        try {
+            const fallbackResponse = await sendPrompt(backendConfig, fallbackPrompt, addLog);
+            parsed = parseDelimitedResponse(fallbackResponse);
+
+            if (parsed.amendment === null) {
+                // Still no delimiters -- treat entire original response as amendment (best-effort)
+                addLog("Could not split response into amendment and comment", "warning");
+                parsed = { amendment: response.trim(), comment: null, raw: response };
+            }
+        } catch (fallbackError) {
+            // Fallback call failed -- use original response as amendment
+            addLog(`Fallback classification failed: ${fallbackError.message}`, "warning");
+            parsed = { amendment: response.trim(), comment: null, raw: response };
+        }
+    }
+
+    // Apply amendment as tracked changes
+    if (parsed.amendment) {
+        addLog("Applying amendment changes...", "info");
+
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            if (Word.ChangeTrackingMode) {
+                context.document.changeTrackingMode = config.trackChangesEnabled
+                    ? Word.ChangeTrackingMode.trackAll
+                    : Word.ChangeTrackingMode.off;
+            }
+            if (config.lineDiffEnabled) {
+                await applySentenceDiffStrategy(context, selection, selectionText, parsed.amendment, addLog);
+            } else {
+                await applyTokenMapStrategy(context, selection, selectionText, parsed.amendment, addLog);
+            }
+        });
+
+        addLog("Amendment changes applied successfully", "success");
+    }
+
+    // Insert comment on selection if available and supported
+    if (parsed.comment && supportsComments) {
+        addLog("Inserting comment...", "info");
+
+        try {
+            await Word.run(async (context) => {
+                const selection = context.document.getSelection();
+                selection.load("text");
+                await context.sync();
+
+                // Insert comment directly on the current selection range
+                const contentRange = selection.getRange();
+                contentRange.insertComment(parsed.comment);
+                await context.sync();
+            });
+
+            addLog("Comment inserted successfully", "success");
+        } catch (commentError) {
+            // Comment insertion failed -- log the comment text so it is not lost
+            addLog(`Comment insertion failed: ${commentError.message}. Comment text: "${parsed.comment}"`, "warning");
+        }
+    } else if (parsed.comment && !supportsComments) {
+        addLog(`Comment generated but Word API 1.4 not available. Comment: "${parsed.comment}"`, "warning");
     }
 }
 

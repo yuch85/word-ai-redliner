@@ -126,7 +126,10 @@ describe('persist', () => {
         const pm1 = new PromptManager();
         pm1.addPrompt('amendment', { name: 'Legal Review', template: 'Review {selection}', description: 'Legal' });
         pm1.addPrompt('comment', { name: 'Style Guide', template: 'Check {selection}', description: 'Style' });
+        // Note: mutual exclusion means only the last-activated of amendment/comment survives.
+        // Activate amendment (comment is not yet active, so no conflict).
         pm1.selectPrompt('amendment', 'legal-review');
+        // Activating comment deactivates amendment via mutual exclusion.
         pm1.selectPrompt('comment', 'style-guide');
 
         // New instance loads from localStorage
@@ -134,7 +137,8 @@ describe('persist', () => {
         pm2.loadState();
 
         expect(pm2.getPrompts('amendment')).toHaveLength(1);
-        expect(pm2.getActivePrompt('amendment').id).toBe('legal-review');
+        // Amendment was deactivated by mutual exclusion when comment was activated
+        expect(pm2.getActivePrompt('amendment')).toBeNull();
         expect(pm2.getPrompts('comment')).toHaveLength(1);
         expect(pm2.getActivePrompt('comment').id).toBe('style-guide');
     });

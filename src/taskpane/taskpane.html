@@ -73,6 +73,12 @@
                     <textarea id="promptTextarea-amendment" class="form-control" rows="6"
                         placeholder="Enter your prompt. Use {selection} to reference the selected text."></textarea>
                 </div>
+                <div class="form-group comment-field-group">
+                    <label for="commentInstructions" class="comment-field-label">Comment Instructions (optional):</label>
+                    <textarea id="commentInstructions" class="form-control comment-instructions-textarea" rows="3"
+                        placeholder="Optionally add comment instructions. The LLM will return both the amendment and a comment in one response."></textarea>
+                    <small class="help-text">When filled, the LLM produces both tracked changes and a comment in a single call.</small>
+                </div>
                 <div class="button-group compact-toolbar">
                     <button id="savePromptBtn-amendment" class="btn btn-compact">Save</button>
                     <button id="deletePromptBtn-amendment" class="btn btn-compact">Delete</button>
@@ -82,6 +88,9 @@
 
             <!-- Comment Panel -->
             <div role="tabpanel" id="panel-comment" aria-labelledby="tab-comment" hidden>
+                <div class="comment-mode-hint">
+                    <p><strong>Tip:</strong> For combined amendment + comment, use the Amendment tab's comment instructions field instead. This gives the LLM full context for both tasks in a single call.</p>
+                </div>
                 <div class="form-group">
                     <select id="promptSelect-comment" class="form-control">
                         <option value="">(None)</option>
