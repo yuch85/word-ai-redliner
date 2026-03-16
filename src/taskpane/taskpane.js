@@ -10,6 +10,11 @@ import { fireCommentRequest } from '../lib/comment-request.js';
 import { extractAllComments, extractDocumentText, extractDocumentStructured, estimateTokenCount, extractTrackedChanges } from '../lib/comment-extractor.js';
 import { createSummaryDocument, buildSummaryHtml } from '../lib/document-generator.js';
 import { parseDelimitedResponse, buildFallbackClassificationPrompt } from '../lib/response-parser.js';
+import { parseDocument } from '../lib/document-parser.js';
+import { chunkDocument } from '../lib/document-chunker.js';
+import { extractContext } from '../lib/context-extractor.js';
+import { processChunksParallel } from '../lib/orchestrator.js';
+import { bookmarkChunkRanges, applyChunkResults, cleanupBookmarks } from '../lib/reassembler.js';
 
 // Global configuration (defaults from env, overridable via UI/localStorage)
 let config = {
@@ -20,6 +25,7 @@ let config = {
         richness: 'plain'
     },
     trackedChangesExtraction: false,
+    commentGranularity: 0,
     backends: {
         ollama: {
             url: process.env.DEFAULT_OLLAMA_URL || '/ollama',
@@ -46,6 +52,8 @@ const promptManager = new PromptManager();
 let currentTab = 'context';
 const unsavedText = { context: '', amendment: '', comment: '', summary: '' };
 let isProcessing = false;
+let isProcessingDoc = false;
+let processDocController = null; // AbortController for cancellation
 let supportsComments = false;  // Set during initialize() via WordApi 1.4 check
 const commentQueue = new CommentQueue(addLog);
 
@@ -69,6 +77,7 @@ function initialize() {
 
     // Setup event listeners -- general
     document.getElementById("reviewBtn").onclick = handleReviewSelection;
+    document.getElementById("processDocBtn").onclick = handleProcessDocument;
     document.getElementById("clearLogsBtn").onclick = clearLogs;
     document.getElementById("settingsToggle").onclick = toggleSettings;
     document.getElementById("runVerificationBtn").onclick = runVerification;
@@ -83,6 +92,7 @@ function initialize() {
     document.getElementById("lineDiffCheckbox").addEventListener('change', saveSettings);
     document.getElementById("docRichnessSelect").addEventListener('change', saveSettings);
     document.getElementById("trackedChangesExtraction").addEventListener('change', saveSettings);
+    document.getElementById("commentGranularity").addEventListener('change', saveSettings);
 
     // Tab bar -- click and keyboard navigation
     for (const category of CATEGORIES) {
@@ -139,6 +149,7 @@ function initialize() {
     renderAllDropdowns();
     updateDotIndicators();
     updateReviewButton();
+    updateProcessDocButton();
     updateTabDisabledState();
     updateTokenEstimate();
 
@@ -230,6 +241,11 @@ function loadSettings() {
             if (config.trackedChangesExtraction === undefined) {
                 config.trackedChangesExtraction = false;
             }
+
+            // Ensure commentGranularity default (for configs saved before this feature)
+            if (config.commentGranularity === undefined) {
+                config.commentGranularity = 0;
+            }
         }
     } catch (e) {
         console.error("Failed to load settings:", e);
@@ -257,6 +273,7 @@ function saveSettings() {
         richness: document.getElementById('docRichnessSelect').value
     };
     config.trackedChangesExtraction = document.getElementById('trackedChangesExtraction').checked;
+    config.commentGranularity = parseInt(document.getElementById('commentGranularity').value || '0', 10);
 
     try {
         localStorage.setItem('wordAI.config', JSON.stringify(config));
@@ -302,6 +319,11 @@ function updateUIFromConfig() {
     const trackedChangesCheckbox = document.getElementById('trackedChangesExtraction');
     if (trackedChangesCheckbox) {
         trackedChangesCheckbox.checked = !!config.trackedChangesExtraction;
+    }
+
+    const granularitySelect = document.getElementById('commentGranularity');
+    if (granularitySelect) {
+        granularitySelect.value = String(config.commentGranularity || 0);
     }
 }
 
@@ -570,6 +592,7 @@ function updateReviewButton() {
             btn.title = 'Select an Amendment or Comment prompt to enable';
             break;
     }
+    updateProcessDocButton();
     updateTokenEstimate();
 }
 
@@ -1323,6 +1346,282 @@ async function handleMergedAmendmentComment(selectionText, commentInstructions, 
         }
     } else if (parsed.comment && !supportsComments) {
         addLog(`Comment generated but Word API 1.4 not available. Comment: "${parsed.comment}"`, "warning");
+    }
+}
+
+// ============================================================================
+// WHOLE-DOCUMENT PROCESSING
+// ============================================================================
+
+/**
+ * Updates the Process Document button label and state based on active mode.
+ * Labels: "Amend Document -->" | "Comment on Document -->" | "Amend & Comment Document -->" | hidden (summary)
+ * When processing: shows "Cancel" with cancel-mode class.
+ */
+function updateProcessDocButton() {
+    const btn = document.getElementById('processDocBtn');
+    if (!btn) return;
+
+    // During processing, button shows "Cancel" and stays enabled
+    if (isProcessingDoc) {
+        btn.textContent = 'Cancel';
+        btn.classList.add('cancel-mode');
+        btn.disabled = false;
+        btn.style.display = '';
+        return;
+    }
+
+    btn.classList.remove('cancel-mode');
+    const mode = promptManager.getActiveMode();
+
+    switch (mode) {
+        case 'summary':
+            btn.style.display = 'none';
+            break;
+        case 'amendment': {
+            btn.style.display = '';
+            const commentField = document.getElementById('commentInstructions');
+            const hasCommentInstructions = commentField && commentField.value.trim();
+            if (hasCommentInstructions) {
+                btn.textContent = 'Amend & Comment Document \u2192';
+            } else {
+                btn.textContent = 'Amend Document \u2192';
+            }
+            btn.disabled = !promptManager.canSubmit();
+            btn.title = 'Process entire document with active prompts';
+            break;
+        }
+        case 'comment':
+            btn.style.display = '';
+            btn.textContent = 'Comment on Document \u2192';
+            btn.disabled = !promptManager.canSubmit();
+            btn.title = 'Process entire document with active prompts';
+            break;
+        case 'none':
+        default:
+            btn.style.display = '';
+            btn.textContent = 'Process Document';
+            btn.disabled = true;
+            btn.title = 'Select an Amendment or Comment prompt to enable';
+            break;
+    }
+}
+
+/**
+ * Updates the process progress bar with current chunk progress.
+ * @param {object} progress - Progress object from orchestrator
+ * @param {number} progress.completed - Completed chunks
+ * @param {number} progress.failed - Failed chunks
+ * @param {number} progress.total - Total chunks
+ * @param {number} progress.percentComplete - Percentage complete
+ * @param {number} progress.estimatedSecondsRemaining - ETA in seconds
+ */
+function updateProcessProgress(progress) {
+    const fill = document.getElementById('progressFill');
+    const text = document.getElementById('progressText');
+    if (fill) fill.style.width = `${progress.percentComplete}%`;
+    if (text) {
+        text.textContent = `Processing: ${progress.completed + progress.failed}/${progress.total} chunks`;
+        if (progress.estimatedSecondsRemaining > 0) {
+            text.textContent += ` (~${progress.estimatedSecondsRemaining}s remaining)`;
+        }
+    }
+}
+
+/**
+ * Handles the full whole-document processing workflow.
+ * Parses document, chunks it, extracts context, processes chunks in parallel,
+ * applies results as tracked changes/comments, and shows summary.
+ * Double-click acts as cancel.
+ */
+async function handleProcessDocument() {
+    // If already processing, this is a cancel action
+    if (isProcessingDoc && processDocController) {
+        processDocController.abort();
+        addLog('Cancelling document processing...', 'warning');
+        return;
+    }
+
+    if (!promptManager.canSubmit()) {
+        addLog('Please select an Amendment or Comment prompt', 'warning');
+        return;
+    }
+
+    const activeMode = promptManager.getActiveMode();
+    if (activeMode === 'summary') return; // Should not happen (button hidden)
+
+    // Block all buttons
+    isProcessingDoc = true;
+    processDocController = new AbortController();
+    const processBtn = document.getElementById('processDocBtn');
+    const reviewBtn = document.getElementById('reviewBtn');
+    processBtn.textContent = 'Cancel';
+    processBtn.classList.add('cancel-mode');
+    reviewBtn.disabled = true;
+
+    // Show progress bar, hide comment status bar
+    const progressBar = document.getElementById('processProgressBar');
+    const commentBar = document.getElementById('commentStatusBar');
+    progressBar.style.display = 'flex';
+    commentBar.style.display = 'none';
+
+    try {
+        // Step 1: Parse document
+        addLog('Parsing document...', 'info');
+        const docModel = await parseDocument();
+        addLog(`Found ${docModel.paragraphs.length} paragraphs (~${docModel.totalTokens} tokens)`, 'info');
+
+        // Step 2: Chunk document
+        const chunks = chunkDocument(docModel, { maxTokens: 12000 });
+        addLog(`Split into ${chunks.length} chunks`, 'info');
+
+        // Step 3: Extract context
+        const documentContext = extractContext(docModel);
+        addLog(`Extracted ${documentContext.definitions.length} definitions, ${documentContext.outline.length} headings`, 'info');
+
+        // Step 4: Bookmark chunk ranges
+        const bookmarkMap = await bookmarkChunkRanges(chunks);
+
+        // Step 5: Process chunks in parallel
+        const backendConfig = getActiveBackendConfig();
+        const concurrency = chunks.some(c => c.tokenCount > 8000) ? 4 : 6;
+        const commentInstructions = document.getElementById('commentInstructions')?.value?.trim() || '';
+
+        const results = await processChunksParallel(chunks, {
+            config: backendConfig,
+            promptManager: promptManager,
+            documentContext: documentContext,
+            log: addLog,
+            onProgress: updateProcessProgress,
+            signal: processDocController.signal,
+            concurrency: concurrency,
+            timeoutMs: 30000,
+            commentInstructions: commentInstructions
+        });
+
+        // Step 6: Apply results to document
+        addLog('Applying changes to document...', 'info');
+        const granularity = parseInt(document.getElementById('commentGranularity')?.value || '0', 10);
+        const applicationResult = await applyChunkResults(results, bookmarkMap, {
+            trackChangesEnabled: config.trackChangesEnabled,
+            lineDiffEnabled: config.lineDiffEnabled,
+            log: addLog,
+            commentGranularity: granularity
+        });
+
+        // Step 7: Cleanup
+        await cleanupBookmarks(bookmarkMap);
+
+        // Step 8: Summary log
+        const failed = results.filter(r => r.status === 'rejected').length;
+        const cancelled = results.filter(r => r.status === 'cancelled').length;
+        addLog(
+            `Document processed: ${chunks.length} chunks, ` +
+            `${applicationResult.amendmentsApplied} amendments applied, ` +
+            `${applicationResult.commentsInserted} comments inserted` +
+            (failed > 0 ? `, ${failed} chunks failed` : '') +
+            (cancelled > 0 ? `, ${cancelled} chunks cancelled` : ''),
+            failed > 0 ? 'warning' : 'success'
+        );
+
+        // Show "Retry All Failed" link if failures exist
+        if (failed > 0) {
+            const failedChunks = results.filter(r => r.status === 'rejected');
+            addLogWithRetry(
+                `${failed} chunk(s) failed. Click to retry failed chunks.`,
+                'warning',
+                () => retryFailedChunks(failedChunks, bookmarkMap, backendConfig)
+            );
+        }
+
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            addLog('Document processing cancelled. Already-applied changes remain in the document.', 'warning');
+        } else {
+            addLog(`Document processing failed: ${error.message}`, 'error');
+            console.error('Process document error:', error);
+        }
+    } finally {
+        isProcessingDoc = false;
+        processDocController = null;
+        progressBar.style.display = 'none';
+        commentBar.style.display = commentQueue.count > 0 ? 'flex' : 'none';
+        updateReviewButton();
+        updateProcessDocButton();
+    }
+}
+
+/**
+ * Retries processing only the failed chunks.
+ * Re-runs the orchestrator on the failed chunk subset and applies results.
+ *
+ * @param {Array} failedResults - Array of ChunkResult objects with status 'rejected'
+ * @param {Map} bookmarkMap - Original chunkId -> bookmarkName map
+ * @param {object} backendConfig - Backend configuration
+ */
+async function retryFailedChunks(failedResults, bookmarkMap, backendConfig) {
+    addLog(`Retrying ${failedResults.length} failed chunk(s)...`, 'info');
+
+    isProcessingDoc = true;
+    processDocController = new AbortController();
+    const processBtn = document.getElementById('processDocBtn');
+    const progressBar = document.getElementById('processProgressBar');
+
+    processBtn.textContent = 'Cancel';
+    processBtn.classList.add('cancel-mode');
+    progressBar.style.display = 'flex';
+
+    try {
+        // Reconstruct chunks from failed results for re-processing
+        const retryChunks = failedResults.map(r => ({
+            id: r.chunkId,
+            text: r.originalText || '',
+            tokenCount: r.originalText ? Math.ceil(r.originalText.length / 4) : 0,
+            overlapText: ''
+        }));
+
+        const commentInstructions = document.getElementById('commentInstructions')?.value?.trim() || '';
+
+        const results = await processChunksParallel(retryChunks, {
+            config: backendConfig,
+            promptManager: promptManager,
+            documentContext: null,
+            log: addLog,
+            onProgress: updateProcessProgress,
+            signal: processDocController.signal,
+            concurrency: 4,
+            timeoutMs: 30000,
+            commentInstructions: commentInstructions
+        });
+
+        const granularity = parseInt(document.getElementById('commentGranularity')?.value || '0', 10);
+        const applicationResult = await applyChunkResults(results, bookmarkMap, {
+            trackChangesEnabled: config.trackChangesEnabled,
+            lineDiffEnabled: config.lineDiffEnabled,
+            log: addLog,
+            commentGranularity: granularity
+        });
+
+        const stillFailed = results.filter(r => r.status === 'rejected').length;
+        addLog(
+            `Retry complete: ${applicationResult.amendmentsApplied} amendments, ` +
+            `${applicationResult.commentsInserted} comments` +
+            (stillFailed > 0 ? `, ${stillFailed} still failed` : ''),
+            stillFailed > 0 ? 'warning' : 'success'
+        );
+
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            addLog('Retry cancelled.', 'warning');
+        } else {
+            addLog(`Retry failed: ${error.message}`, 'error');
+        }
+    } finally {
+        isProcessingDoc = false;
+        processDocController = null;
+        progressBar.style.display = 'none';
+        updateReviewButton();
+        updateProcessDocButton();
     }
 }
 
