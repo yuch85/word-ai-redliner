@@ -1,8 +1,8 @@
 /**
  * Unit tests for src/lib/llm-client.js
- * Tests stripThinkTags, sendPrompt, and testConnection exports.
+ * Tests stripThinkTags, sendPrompt, sendMessages, and testConnection exports.
  */
-const { stripThinkTags, sendPrompt, testConnection } = require('../src/lib/llm-client.js');
+const { stripThinkTags, sendPrompt, sendMessages, testConnection } = require('../src/lib/llm-client.js');
 
 // ============================================================================
 // stripThinkTags
@@ -317,5 +317,215 @@ describe('testConnection', () => {
 
     const result = await testConnection({ url: '/ollama', apiKey: '' });
     expect(result).toEqual({ connected: true, models: [] });
+  });
+});
+
+// ============================================================================
+// sendMessages
+// ============================================================================
+
+describe('sendMessages', () => {
+  let mockAbortFn;
+  let mockSignal;
+
+  beforeEach(() => {
+    global.fetch = jest.fn();
+    mockAbortFn = jest.fn();
+    mockSignal = { aborted: false, addEventListener: jest.fn(), removeEventListener: jest.fn() };
+    global.AbortController = jest.fn().mockImplementation(() => ({
+      signal: mockSignal,
+      abort: mockAbortFn
+    }));
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    delete global.fetch;
+    jest.useRealTimers();
+  });
+
+  test('sends messages array in request body (not flattened to single string)', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'response text' } }]
+      })
+    });
+
+    const messages = [
+      { role: 'system', content: 'You are a legal document reviewer.' },
+      { role: 'user', content: 'Review this clause: ...' }
+    ];
+
+    await sendMessages({ url: '/vllm', apiKey: '', model: 'test-model' }, messages);
+
+    const fetchCall = global.fetch.mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+    expect(body.messages).toEqual(messages);
+    expect(body.model).toBe('test-model');
+    expect(body.stream).toBe(false);
+  });
+
+  test('preserves system and user roles in the messages array', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'ok' } }]
+      })
+    });
+
+    const messages = [
+      { role: 'system', content: 'System instructions here.' },
+      { role: 'user', content: 'User content here.' }
+    ];
+
+    await sendMessages({ url: '/vllm', apiKey: '', model: 'test' }, messages);
+
+    const fetchCall = global.fetch.mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+    expect(body.messages[0].role).toBe('system');
+    expect(body.messages[0].content).toBe('System instructions here.');
+    expect(body.messages[1].role).toBe('user');
+    expect(body.messages[1].content).toBe('User content here.');
+  });
+
+  test('strips think tags from response (reuses stripThinkTags)', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '<think>reasoning</think>Clean output' } }]
+      })
+    });
+
+    const messages = [{ role: 'user', content: 'Hello' }];
+    const result = await sendMessages({ url: '/vllm', apiKey: '', model: 'test' }, messages);
+    expect(result).toBe('Clean output');
+  });
+
+  test('respects abort signal (throws on aborted signal)', async () => {
+    // Simulate fetch rejecting due to abort
+    global.fetch.mockRejectedValue(new DOMException('The operation was aborted.', 'AbortError'));
+
+    const externalSignal = {
+      aborted: true,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn()
+    };
+
+    const messages = [{ role: 'user', content: 'Hello' }];
+    await expect(
+      sendMessages({ url: '/vllm', apiKey: '', model: 'test' }, messages, null, externalSignal)
+    ).rejects.toThrow();
+  });
+
+  test('uses configurable timeout (default 30000ms), not hardcoded 120000ms', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'response' } }]
+      })
+    });
+
+    const messages = [{ role: 'user', content: 'Hello' }];
+
+    // Test with default timeout
+    await sendMessages({ url: '/vllm', apiKey: '', model: 'test' }, messages);
+
+    // Verify fetch was called with the internal signal
+    const fetchCall = global.fetch.mock.calls[0];
+    expect(fetchCall[1].signal).toBeDefined();
+  });
+
+  test('returns cleaned response text on success', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '  The amended text is here.  ' } }]
+      })
+    });
+
+    const messages = [{ role: 'user', content: 'Amend this' }];
+    const result = await sendMessages({ url: '/vllm', apiKey: '', model: 'test' }, messages);
+    expect(result).toBe('The amended text is here.');
+  });
+
+  test('throws on non-ok HTTP response', async () => {
+    global.fetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable'
+    });
+
+    const messages = [{ role: 'user', content: 'Hello' }];
+    await expect(
+      sendMessages({ url: '/vllm', apiKey: '', model: 'test' }, messages)
+    ).rejects.toThrow('HTTP 503');
+  });
+
+  test('includes Authorization header when apiKey provided', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'ok' } }]
+      })
+    });
+
+    const messages = [{ role: 'user', content: 'Hello' }];
+    await sendMessages({ url: '/vllm', apiKey: 'secret-key', model: 'test' }, messages);
+
+    const fetchCall = global.fetch.mock.calls[0];
+    expect(fetchCall[1].headers['Authorization']).toBe('Bearer secret-key');
+  });
+
+  test('appends /v1/chat/completions to config.url', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'ok' } }]
+      })
+    });
+
+    const messages = [{ role: 'user', content: 'Hello' }];
+    await sendMessages({ url: '/vllm/', apiKey: '', model: 'test' }, messages);
+
+    const fetchCall = global.fetch.mock.calls[0];
+    expect(fetchCall[0]).toBe('/vllm/v1/chat/completions');
+  });
+});
+
+// ============================================================================
+// sendPrompt backward compatibility
+// ============================================================================
+
+describe('sendPrompt backward compatibility', () => {
+  beforeEach(() => {
+    global.fetch = jest.fn();
+    global.AbortController = jest.fn().mockImplementation(() => ({
+      signal: 'mock-signal',
+      abort: jest.fn()
+    }));
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    delete global.fetch;
+    jest.useRealTimers();
+  });
+
+  test('existing sendPrompt still works unchanged', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'response from sendPrompt' } }]
+      })
+    });
+
+    const result = await sendPrompt({ url: '/vllm', apiKey: '', model: 'test' }, 'Hello');
+    expect(result).toBe('response from sendPrompt');
+
+    // Verify it still wraps in a single user message
+    const fetchCall = global.fetch.mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+    expect(body.messages).toEqual([{ role: 'user', content: 'Hello' }]);
   });
 });
