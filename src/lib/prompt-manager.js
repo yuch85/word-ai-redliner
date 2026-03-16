@@ -135,6 +135,19 @@ export class PromptManager {
     selectPrompt(category, promptId) {
         this._validateCategory(category);
 
+        // Mutual exclusion: activating amendment deactivates comment and vice versa.
+        // Deactivation (promptId === null) does NOT trigger cross-category deactivation.
+        // Context and summary are independent and never affected.
+        if (promptId !== null) {
+            if (category === 'amendment') {
+                this.state.comment.activePromptId = null;
+                this.persistState('comment');
+            } else if (category === 'comment') {
+                this.state.amendment.activePromptId = null;
+                this.persistState('amendment');
+            }
+        }
+
         const catState = this.state[category];
         catState.activePromptId = promptId;
 
@@ -216,7 +229,7 @@ export class PromptManager {
         const hasAmendment = !!this.state.amendment.activePromptId;
         const hasComment = !!this.state.comment.activePromptId;
 
-        if (hasAmendment && hasComment) return 'both';
+        // 'both' is no longer possible due to mutual exclusion in selectPrompt
         if (hasAmendment) return 'amendment';
         if (hasComment) return 'comment';
         return 'none';
@@ -317,6 +330,58 @@ export class PromptManager {
             }
             messages.push({ role: 'user', content: content });
         }
+
+        return messages;
+    }
+
+    /**
+     * Composes a merged messages array for combined amendment + comment in a single LLM call.
+     *
+     * When commentInstructions is non-empty, appends delimiter instructions to the
+     * amendment prompt so the LLM returns both an amended text and a comment in one response.
+     * When commentInstructions is empty/falsy, delegates to composeMessages('amendment').
+     *
+     * @param {string} selectionText - The user's selected text from the document
+     * @param {string} commentInstructions - Comment instructions text (empty = amendment-only)
+     * @returns {Array<{role: string, content: string}>} Messages array for chat completions
+     */
+    composeMergedMessages(selectionText, commentInstructions) {
+        // Empty comment instructions = amendment-only (backward compatible)
+        if (!commentInstructions || !commentInstructions.trim()) {
+            return this.composeMessages(selectionText, 'amendment');
+        }
+
+        const messages = [];
+
+        // System message from context (if active)
+        const contextPrompt = this.getActivePrompt('context');
+        if (contextPrompt) {
+            messages.push({ role: 'system', content: contextPrompt.template });
+        }
+
+        // User message from amendment prompt with {selection} replaced
+        const amendmentPrompt = this.getActivePrompt('amendment');
+        if (!amendmentPrompt) {
+            return [];
+        }
+
+        let content;
+        if (amendmentPrompt.template.includes('{selection}')) {
+            content = amendmentPrompt.template.replace(/{selection}/g, selectionText);
+        } else {
+            content = amendmentPrompt.template + '\n\n' + selectionText;
+        }
+
+        // Append delimiter instructions for merged response
+        content += `\n\nAdditionally, provide a comment for this text based on these instructions: ${commentInstructions.trim()}
+
+FORMAT YOUR RESPONSE WITH THESE EXACT DELIMITERS:
+===AMENDMENT===
+[Your amended version of the text here]
+===COMMENT===
+[Your comment here]`;
+
+        messages.push({ role: 'user', content });
 
         return messages;
     }
