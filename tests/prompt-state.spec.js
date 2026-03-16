@@ -271,13 +271,16 @@ describe('validation', () => {
         expect(pm.canSubmit()).toBe(true);
     });
 
-    test('canSubmit returns true when both amendment and comment are active', () => {
+    test('canSubmit returns true after activating amendment then comment (mutual exclusion keeps last)', () => {
         const pm = new PromptManager();
         pm.addPrompt('amendment', { name: 'Legal Review', template: 'Review {selection}', description: 'Legal' });
         pm.addPrompt('comment', { name: 'Style Guide', template: 'Check {selection}', description: 'Style' });
         pm.selectPrompt('amendment', 'legal-review');
         pm.selectPrompt('comment', 'style-guide');
 
+        // Mutual exclusion: comment activation deactivated amendment
+        expect(pm.getActivePrompt('amendment')).toBeNull();
+        expect(pm.getActivePrompt('comment')).not.toBeNull();
         expect(pm.canSubmit()).toBe(true);
     });
 
@@ -302,14 +305,94 @@ describe('validation', () => {
         expect(pm.getActiveMode()).toBe('comment');
     });
 
-    test('getActiveMode returns "both" when amendment and comment are active', () => {
+    test('getActiveMode never returns "both" -- mutual exclusion prevents dual-active', () => {
         const pm = new PromptManager();
         pm.addPrompt('amendment', { name: 'Legal Review', template: 'Review {selection}', description: 'Legal' });
         pm.addPrompt('comment', { name: 'Style Guide', template: 'Check {selection}', description: 'Style' });
         pm.selectPrompt('amendment', 'legal-review');
         pm.selectPrompt('comment', 'style-guide');
 
-        expect(pm.getActiveMode()).toBe('both');
+        // Activating comment should have deactivated amendment via mutual exclusion
+        expect(pm.getActiveMode()).not.toBe('both');
+        expect(pm.getActiveMode()).toBe('comment');
+    });
+});
+
+// ============================================================================
+// Mutual Exclusion: Amendment/Comment selectPrompt behavior
+// ============================================================================
+
+describe('mutual exclusion', () => {
+    test('selectPrompt("amendment", id) deactivates comment when comment was active', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Review {selection}', description: 'Legal' });
+        pm.addPrompt('comment', { name: 'Style Guide', template: 'Check {selection}', description: 'Style' });
+
+        pm.selectPrompt('comment', 'style-guide');
+        expect(pm.getActivePrompt('comment')).not.toBeNull();
+
+        pm.selectPrompt('amendment', 'legal-review');
+        expect(pm.getActivePrompt('amendment')).not.toBeNull();
+        expect(pm.getActivePrompt('comment')).toBeNull();
+    });
+
+    test('selectPrompt("comment", id) deactivates amendment when amendment was active', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Review {selection}', description: 'Legal' });
+        pm.addPrompt('comment', { name: 'Style Guide', template: 'Check {selection}', description: 'Style' });
+
+        pm.selectPrompt('amendment', 'legal-review');
+        expect(pm.getActivePrompt('amendment')).not.toBeNull();
+
+        pm.selectPrompt('comment', 'style-guide');
+        expect(pm.getActivePrompt('comment')).not.toBeNull();
+        expect(pm.getActivePrompt('amendment')).toBeNull();
+    });
+
+    test('selectPrompt("amendment", null) does NOT affect comment (deactivation is not cross-category)', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('comment', { name: 'Style Guide', template: 'Check {selection}', description: 'Style' });
+        pm.selectPrompt('comment', 'style-guide');
+
+        pm.selectPrompt('amendment', null);
+
+        expect(pm.getActivePrompt('comment')).not.toBeNull();
+    });
+
+    test('selectPrompt("context", id) does NOT affect amendment or comment', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('context', { name: 'Legal Context', template: 'Legal context', description: 'Legal' });
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Review {selection}', description: 'Legal' });
+
+        pm.selectPrompt('amendment', 'legal-review');
+        pm.selectPrompt('context', 'legal-context');
+
+        expect(pm.getActivePrompt('amendment')).not.toBeNull();
+        expect(pm.getActivePrompt('context')).not.toBeNull();
+    });
+
+    test('selectPrompt("summary", id) does NOT affect amendment or comment', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('summary', { name: 'Exec Summary', template: '{comments}', description: 'Exec' });
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Review {selection}', description: 'Legal' });
+
+        pm.selectPrompt('amendment', 'legal-review');
+        pm.selectPrompt('summary', 'exec-summary');
+
+        expect(pm.getActivePrompt('amendment')).not.toBeNull();
+        expect(pm.getActivePrompt('summary')).not.toBeNull();
+    });
+
+    test('mutual exclusion persists the deactivated category to localStorage', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Legal Review', template: 'Review {selection}', description: 'Legal' });
+        pm.addPrompt('comment', { name: 'Style Guide', template: 'Check {selection}', description: 'Style' });
+
+        pm.selectPrompt('comment', 'style-guide');
+        pm.selectPrompt('amendment', 'legal-review');
+
+        // Comment should be persisted as deactivated
+        expect(localStorage.getItem('wordAI.active.comment')).toBe('');
     });
 });
 
@@ -535,13 +618,15 @@ describe('SUMM-02: summary mode and submission', () => {
         expect(pm.canSubmit()).toBe(true);
     });
 
-    test('canSubmit still returns true for both amendment and comment (regression check)', () => {
+    test('canSubmit still returns true after mutual exclusion (only last-activated survives)', () => {
         const pm = new PromptManager();
         pm.addPrompt('amendment', { name: 'Legal Review', template: '{selection}', description: 'Legal' });
         pm.addPrompt('comment', { name: 'Style Guide', template: '{selection}', description: 'Style' });
         pm.selectPrompt('amendment', 'legal-review');
         pm.selectPrompt('comment', 'style-guide');
 
+        // Mutual exclusion: comment deactivated amendment
+        expect(pm.getActivePrompt('amendment')).toBeNull();
         expect(pm.canSubmit()).toBe(true);
     });
 

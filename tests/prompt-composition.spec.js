@@ -284,6 +284,82 @@ describe('SUMM-05: composeSummaryMessages', () => {
 });
 
 // ============================================================================
+// composeMergedMessages
+// ============================================================================
+
+describe('composeMergedMessages', () => {
+    test('with empty commentInstructions, delegates to composeMessages("amendment")', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Amend', template: 'Fix this: {selection}', description: '' });
+        pm.selectPrompt('amendment', 'amend');
+
+        const merged = pm.composeMergedMessages('clause text', '');
+        const regular = pm.composeMessages('clause text', 'amendment');
+
+        expect(merged).toEqual(regular);
+    });
+
+    test('with commentInstructions, returns messages with delimiter instructions appended', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Amend', template: 'Fix this: {selection}', description: '' });
+        pm.selectPrompt('amendment', 'amend');
+
+        const messages = pm.composeMergedMessages('clause text', 'Check for legal issues');
+
+        // Should have user message with delimiter instructions
+        const userMsg = messages.find(m => m.role === 'user');
+        expect(userMsg).toBeDefined();
+        expect(userMsg.content).toContain('Fix this: clause text');
+        expect(userMsg.content).toContain('Check for legal issues');
+        expect(userMsg.content).toContain('===AMENDMENT===');
+        expect(userMsg.content).toContain('===COMMENT===');
+    });
+
+    test('includes context system message when context prompt is active', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('context', { name: 'Legal', template: 'You are a legal reviewer', description: '' });
+        pm.selectPrompt('context', 'legal');
+        pm.addPrompt('amendment', { name: 'Amend', template: '{selection}', description: '' });
+        pm.selectPrompt('amendment', 'amend');
+
+        const messages = pm.composeMergedMessages('text', 'comment instructions');
+
+        expect(messages).toHaveLength(2);
+        expect(messages[0]).toEqual({ role: 'system', content: 'You are a legal reviewer' });
+    });
+
+    test('with no active amendment prompt, returns empty array', () => {
+        const pm = new PromptManager();
+
+        const messages = pm.composeMergedMessages('text', 'comments');
+
+        expect(messages).toEqual([]);
+    });
+
+    test('with falsy commentInstructions (null), delegates to amendment-only', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Amend', template: '{selection}', description: '' });
+        pm.selectPrompt('amendment', 'amend');
+
+        const merged = pm.composeMergedMessages('text', null);
+        const regular = pm.composeMessages('text', 'amendment');
+
+        expect(merged).toEqual(regular);
+    });
+
+    test('delimiter instructions include FORMAT YOUR RESPONSE directive', () => {
+        const pm = new PromptManager();
+        pm.addPrompt('amendment', { name: 'Amend', template: '{selection}', description: '' });
+        pm.selectPrompt('amendment', 'amend');
+
+        const messages = pm.composeMergedMessages('text', 'add a comment');
+
+        const userMsg = messages.find(m => m.role === 'user');
+        expect(userMsg.content).toContain('FORMAT YOUR RESPONSE WITH THESE EXACT DELIMITERS');
+    });
+});
+
+// ============================================================================
 // {whole document} placeholder in composeSummaryMessages
 // ============================================================================
 
