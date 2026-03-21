@@ -2,7 +2,7 @@
  * Unit tests for src/lib/llm-client.js
  * Tests stripThinkTags, sendPrompt, sendMessages, and testConnection exports.
  */
-const { stripThinkTags, sendPrompt, sendMessages, testConnection } = require('../src/lib/llm-client.js');
+const { stripThinkTags, stripChunkDelimiters, sendPrompt, sendMessages, testConnection } = require('../src/lib/llm-client.js');
 
 // ============================================================================
 // stripThinkTags
@@ -79,6 +79,87 @@ describe('stripThinkTags', () => {
   test('handles text with no think tags (passes through)', () => {
     const input = 'Just regular text here.';
     expect(stripThinkTags(input)).toBe('Just regular text here.');
+  });
+});
+
+// ============================================================================
+// stripChunkDelimiters
+// ============================================================================
+
+describe('stripChunkDelimiters', () => {
+  test('returns empty string unchanged', () => {
+    expect(stripChunkDelimiters('')).toBe('');
+  });
+
+  test('returns null unchanged', () => {
+    expect(stripChunkDelimiters(null)).toBe(null);
+  });
+
+  test('returns undefined unchanged', () => {
+    expect(stripChunkDelimiters(undefined)).toBe(undefined);
+  });
+
+  test('removes [END TEXT] marker on its own line', () => {
+    const input = 'Some amended text here.\n[END TEXT]';
+    expect(stripChunkDelimiters(input)).toBe('Some amended text here.');
+  });
+
+  test('removes [AMEND THIS TEXT] marker on its own line', () => {
+    const input = '[AMEND THIS TEXT]\nSome amended text here.';
+    expect(stripChunkDelimiters(input)).toBe('Some amended text here.');
+  });
+
+  test('removes [CONTEXT - DO NOT AMEND] marker on its own line', () => {
+    const input = '[CONTEXT - DO NOT AMEND]\nOverlap text\n[END CONTEXT]\n\nAmended text';
+    expect(stripChunkDelimiters(input)).toBe('Overlap text\n\nAmended text');
+  });
+
+  test('removes [END CONTEXT] marker on its own line', () => {
+    const input = 'Previous text\n[END CONTEXT]\nAmended text';
+    expect(stripChunkDelimiters(input)).toBe('Previous text\n\nAmended text');
+  });
+
+  test('removes all four markers in a complete prompt echo', () => {
+    const input = '[CONTEXT - DO NOT AMEND]\nOverlap paragraph\n[END CONTEXT]\n\n[AMEND THIS TEXT]\nActual amended text here.\n[END TEXT]';
+    expect(stripChunkDelimiters(input)).toBe('Overlap paragraph\n\nActual amended text here.');
+  });
+
+  test('handles markers with leading/trailing whitespace on the line', () => {
+    const input = 'Amended text\n  [END TEXT]  ';
+    expect(stripChunkDelimiters(input)).toBe('Amended text');
+  });
+
+  test('is case-insensitive', () => {
+    const input = 'Amended text\n[end text]';
+    expect(stripChunkDelimiters(input)).toBe('Amended text');
+  });
+
+  test('does not match partial markers embedded in text', () => {
+    const input = 'The [END TEXT] marker should only match on its own line, not here.';
+    expect(stripChunkDelimiters(input)).toBe('The [END TEXT] marker should only match on its own line, not here.');
+  });
+
+  test('passes through text with no markers unchanged', () => {
+    const input = 'Regular amended text\nwith multiple paragraphs\nand no markers.';
+    expect(stripChunkDelimiters(input)).toBe('Regular amended text\nwith multiple paragraphs\nand no markers.');
+  });
+
+  test('collapses triple+ newlines to double after removal', () => {
+    const input = 'Before\n\n[END CONTEXT]\n\nAfter';
+    const result = stripChunkDelimiters(input);
+    expect(result).not.toContain('\n\n\n');
+  });
+
+  test('calls log callback when markers are found', () => {
+    const log = jest.fn();
+    stripChunkDelimiters('text\n[END TEXT]', log);
+    expect(log).toHaveBeenCalledWith('Stripped chunk delimiter markers from response', 'info');
+  });
+
+  test('does NOT call log when no markers present', () => {
+    const log = jest.fn();
+    stripChunkDelimiters('Regular text', log);
+    expect(log).not.toHaveBeenCalled();
   });
 });
 

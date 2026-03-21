@@ -510,6 +510,12 @@ export async function applyChunkResults(results, bookmarkMap, options) {
           } else {
             await applyTokenMapStrategy(context, range, originalText, normalizedAmendment, log);
           }
+
+          // Disable tracked changes after fallback (matching paragraph-level strategy behavior)
+          if (Word.ChangeTrackingMode && trackChangesEnabled) {
+            context.document.changeTrackingMode = Word.ChangeTrackingMode.off;
+            await context.sync();
+          }
         }
       });
 
@@ -525,6 +531,22 @@ export async function applyChunkResults(results, bookmarkMap, options) {
   }
 
   // Phase 2: Comments in document order (after all amendments)
+  // Ensure tracked changes are off before inserting comments.
+  // If any amendment fallback path left ChangeTrackingMode.trackAll enabled,
+  // comment insertion on ranges containing tracked changes can fail with AccessDenied.
+  if (fulfilledWithAmendments.length > 0) {
+    try {
+      await Word.run(async (context) => {
+        if (Word.ChangeTrackingMode) {
+          context.document.changeTrackingMode = Word.ChangeTrackingMode.off;
+          await context.sync();
+        }
+      });
+    } catch (_err) {
+      // Best-effort -- continue with comment insertion even if this fails
+    }
+  }
+
   const fulfilledWithComments = results
     .filter((r) => r.status === 'fulfilled' && r.comment);
 
@@ -553,6 +575,10 @@ export async function applyChunkResults(results, bookmarkMap, options) {
       errors.push(`Chunk ${result.chunkId}: comment failed -- ${err.message || String(err)}`);
       log(`Chunk ${result.chunkId}: comment failed -- ${err.message}`, 'error');
     }
+
+    // Yield to event loop between comments to prevent UI freeze and
+    // avoid overwhelming the Word document model with rapid-fire Word.run() calls
+    await _yieldToEventLoop();
   }
 
   return { amendmentsApplied, commentsInserted, errors };

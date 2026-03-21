@@ -571,6 +571,87 @@ describe('processChunksParallel', () => {
     });
   });
 
+  describe('post-processing: delimiter stripping', () => {
+    test('strips [END TEXT] marker from amendment response', async () => {
+      const responseWithMarker = 'Amended clause text.\n[END TEXT]';
+      const chunks = [mockChunk('chunk-0', 'original clause text', 0, 2)];
+
+      const results = await processChunksParallel(chunks, {
+        config: defaultConfig,
+        promptManager: mockPromptManager('amendment'),
+        documentContext: mockDocumentContext(),
+        log,
+        sendMessagesFn: mockSendMessages({ response: responseWithMarker }),
+        formatContextPrefixFn: () => '',
+      });
+
+      expect(results[0].status).toBe('fulfilled');
+      expect(results[0].amendment).not.toContain('[END TEXT]');
+      expect(results[0].amendment).toBe('Amended clause text.');
+    });
+
+    test('strips [AMEND THIS TEXT] marker from amendment response', async () => {
+      const responseWithMarker = '[AMEND THIS TEXT]\nAmended clause text.';
+      const chunks = [mockChunk('chunk-0', 'original clause text', 0, 2)];
+
+      const results = await processChunksParallel(chunks, {
+        config: defaultConfig,
+        promptManager: mockPromptManager('amendment'),
+        documentContext: mockDocumentContext(),
+        log,
+        sendMessagesFn: mockSendMessages({ response: responseWithMarker }),
+        formatContextPrefixFn: () => '',
+      });
+
+      expect(results[0].status).toBe('fulfilled');
+      expect(results[0].amendment).not.toContain('[AMEND THIS TEXT]');
+      expect(results[0].amendment).toBe('Amended clause text.');
+    });
+
+    test('strips all chunk delimiter markers from echoed prompt structure', async () => {
+      const echoedResponse = '[CONTEXT - DO NOT AMEND]\nOverlap text\n[END CONTEXT]\n\n[AMEND THIS TEXT]\nActual amended text.\n[END TEXT]';
+      const chunks = [mockChunk('chunk-0', 'original text', 0, 2)];
+
+      const results = await processChunksParallel(chunks, {
+        config: defaultConfig,
+        promptManager: mockPromptManager('amendment'),
+        documentContext: mockDocumentContext(),
+        log,
+        sendMessagesFn: mockSendMessages({ response: echoedResponse }),
+        formatContextPrefixFn: () => '',
+      });
+
+      expect(results[0].status).toBe('fulfilled');
+      expect(results[0].amendment).not.toContain('[END TEXT]');
+      expect(results[0].amendment).not.toContain('[AMEND THIS TEXT]');
+      expect(results[0].amendment).not.toContain('[CONTEXT - DO NOT AMEND]');
+      expect(results[0].amendment).not.toContain('[END CONTEXT]');
+      expect(results[0].amendment).toContain('Actual amended text.');
+    });
+
+    test('prompt includes instruction not to output delimiter markers', async () => {
+      const chunks = [mockChunk('chunk-0', 'original text', 0, 2)];
+      let capturedMessages = null;
+
+      await processChunksParallel(chunks, {
+        config: defaultConfig,
+        promptManager: mockPromptManager('amendment'),
+        documentContext: mockDocumentContext(),
+        log,
+        sendMessagesFn: async (config, messages) => {
+          capturedMessages = messages;
+          return 'Amended text';
+        },
+        formatContextPrefixFn: () => '',
+      });
+
+      const userMsg = capturedMessages.find((m) => m.role === 'user');
+      expect(userMsg.content).toContain('Do NOT include the delimiter markers');
+      expect(userMsg.content).toContain('[AMEND THIS TEXT]');
+      expect(userMsg.content).toContain('[END TEXT]');
+    });
+  });
+
   describe('edge cases', () => {
     test('empty chunks array returns empty results', async () => {
       const results = await processChunksParallel([], {

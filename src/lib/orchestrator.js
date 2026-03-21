@@ -18,7 +18,7 @@
  * @module orchestrator
  */
 
-import { sendMessages as defaultSendMessages, stripMarkdown } from './llm-client.js';
+import { sendMessages as defaultSendMessages, stripMarkdown, stripChunkDelimiters } from './llm-client.js';
 import { formatContextPrefix as defaultFormatContextPrefix } from './context-extractor.js';
 import { parseDelimitedResponse as defaultParseDelimitedResponse } from './response-parser.js';
 
@@ -116,7 +116,8 @@ function _composeChunkMessages(chunk, documentContext, promptManager, mode, comm
 - Do NOT use markdown formatting. Output plain text only — no asterisks (*), no bold (**), no headings (###), no bullet points, no numbered lists unless they were in the original text.
 - Preserve the original text structure. Only change content as instructed, not formatting.
 - Do NOT add any preamble like "Here is the amended text:" or similar.
-- Do NOT add any postscript explaining what was changed.`;
+- Do NOT add any postscript explaining what was changed.
+- Do NOT include the delimiter markers [AMEND THIS TEXT], [END TEXT], [CONTEXT - DO NOT AMEND], or [END CONTEXT] in your output. These are input framing only.`;
   }
 
   // For merged mode, append comment instructions with delimiter format.
@@ -267,9 +268,10 @@ export async function processChunksParallel(chunks, options) {
         comment = responseText;
       }
 
-      // Post-process: strip markdown artifacts from amendment text
+      // Post-process: strip artifacts from amendment text
       if (amendment) {
         amendment = stripMarkdown(amendment, log);
+        amendment = stripChunkDelimiters(amendment, log);
       }
 
       completed++;

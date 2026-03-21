@@ -124,6 +124,48 @@ export function stripMarkdown(text, log) {
 }
 
 /**
+ * Strips chunk delimiter markers that the LLM may echo from the prompt.
+ *
+ * During whole-document processing, the orchestrator wraps chunk text in
+ * delimiter markers ([AMEND THIS TEXT]...[END TEXT] and
+ * [CONTEXT - DO NOT AMEND]...[END CONTEXT]). LLMs sometimes echo these
+ * markers in their output. This function removes them as a safety net.
+ *
+ * @param {string} text - LLM response text potentially containing delimiter markers
+ * @param {function} [log] - Optional logging callback (message, type)
+ * @returns {string} Text with delimiter markers removed
+ */
+export function stripChunkDelimiters(text, log) {
+  if (!text) return text;
+
+  let cleaned = text;
+  let hadDelimiters = false;
+
+  // Remove all four delimiter markers (case-insensitive, with optional surrounding whitespace on the line)
+  const markers = [
+    /^\s*\[AMEND THIS TEXT\]\s*$/gmi,
+    /^\s*\[END TEXT\]\s*$/gmi,
+    /^\s*\[CONTEXT\s*-\s*DO NOT AMEND\]\s*$/gmi,
+    /^\s*\[END CONTEXT\]\s*$/gmi,
+  ];
+
+  for (const marker of markers) {
+    const pass = cleaned.replace(marker, '');
+    if (pass !== cleaned) hadDelimiters = true;
+    cleaned = pass;
+  }
+
+  // Collapse any resulting triple+ newlines to double
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+
+  if (hadDelimiters && typeof log === 'function') {
+    log('Stripped chunk delimiter markers from response', 'info');
+  }
+
+  return cleaned;
+}
+
+/**
  * Private helper to build the request URL and headers for chat completions.
  *
  * @param {object} config - Backend configuration
