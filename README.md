@@ -422,11 +422,6 @@ Word AI Redliner's formatting-preserving reassembly draws on insights from sever
 excellent open-source projects in the document editing space. We are grateful to
 their authors for sharing their work:
 
-- **[office-word-diff](https://github.com/niclasgrunworked/office-word-diff)** by Niclas Grun --
-  The word-level diff engine at the heart of our tracked changes pipeline. Its
-  cascading token map -> sentence diff -> block replace strategy provides the
-  foundation for applying granular edits to Word documents.
-
 - **[docx-redline-js](https://github.com/AnsonLai/docx-redline-js)** by Anson Lai --
   A JavaScript OOXML-level redlining engine whose surgical mode, paragraph
   property cloning, and reconstruction writer patterns informed our approach to
@@ -445,12 +440,6 @@ their authors for sharing their work:
 - **[@xmldom/xmldom](https://github.com/xmldom/xmldom)** --
   A W3C-compliant XML DOM implementation whose namespace-aware manipulation
   patterns and whitespace preservation mechanisms underpin correct OOXML handling.
-
-- **superdoc-redlines** --
-  A multi-agent document redlining system whose intermediate representation
-  design, position mapping, fuzzy matching, content validation, and graceful
-  degradation patterns directly influenced our paragraph alignment algorithm
-  and LLM output validation.
 
 ## Licensing
 
