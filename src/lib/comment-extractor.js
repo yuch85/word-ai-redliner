@@ -348,11 +348,11 @@ export function estimateTokenCount(text) {
  * Uses body.paragraphs (WordApi 1.1) with styleBuiltIn/isListItem (WordApi 1.3).
  *
  * @param {object} [options]
- * @param {'plain'|'headings'|'structured'} [options.richness='plain'] - Detail level
+ * @param {'plain'|'headings'|'structured'} [options.richness='structured'] - Detail level
  * @returns {Promise<string>} Formatted document text
  */
 export async function extractDocumentStructured(options = {}) {
-    const richness = options.richness || 'plain';
+    const richness = options.richness || 'structured';
     let result = '';
 
     await Word.run(async (context) => {

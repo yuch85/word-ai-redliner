@@ -562,25 +562,26 @@ describe('extractDocumentStructured', () => {
     // --- defaults ---
 
     describe('defaults', () => {
-        test('no args defaults to richness=plain', async () => {
+        test('no args defaults to richness=structured', async () => {
             mockParagraphs = [
                 createMockParagraph('Hello world', 'Normal')
             ];
 
             const result = await extractDocumentStructured();
 
+            // structured richness includes paragraph text (no heading prefix for Normal style)
             expect(result).toBe('Hello world');
         });
 
-        test('richness defaults to plain when not specified (heading styles ignored)', async () => {
+        test('richness defaults to structured when not specified (heading styles rendered)', async () => {
             mockParagraphs = [
                 createMockParagraph('Simple text', 'Heading1')
             ];
 
-            // With richness=plain (default), heading styles are ignored
+            // With richness=structured (default), heading styles are rendered
             const result = await extractDocumentStructured({});
 
-            expect(result).toBe('Simple text');
+            expect(result).toBe('# Simple text');
         });
 
         test('returns full text without truncation regardless of length', async () => {

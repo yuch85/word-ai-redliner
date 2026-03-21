@@ -22,7 +22,7 @@ let config = {
     trackChangesEnabled: true,
     lineDiffEnabled: false,
     docExtraction: {
-        richness: 'plain'
+        richness: 'structured'
     },
     trackedChangesExtraction: false,
     commentGranularity: 0,
@@ -230,7 +230,7 @@ function loadSettings() {
 
             // Ensure docExtraction defaults exist (for configs saved before this feature)
             if (!config.docExtraction) {
-                config.docExtraction = { richness: 'plain' };
+                config.docExtraction = { richness: 'structured' };
             }
             // Clean up legacy maxLength from older configs
             if (config.docExtraction.maxLength !== undefined) {
@@ -313,7 +313,7 @@ function updateUIFromConfig() {
 
     const richnessSelect = document.getElementById('docRichnessSelect');
     if (richnessSelect && config.docExtraction) {
-        richnessSelect.value = config.docExtraction.richness || 'plain';
+        richnessSelect.value = config.docExtraction.richness || 'structured';
     }
 
     const trackedChangesCheckbox = document.getElementById('trackedChangesExtraction');
@@ -1023,7 +1023,7 @@ async function handleSummaryGeneration() {
         const activeSummaryPrompt = promptManager.getActivePrompt('summary');
         if (activeSummaryPrompt && activeSummaryPrompt.template.includes('{whole document}')) {
             const extraction = config.docExtraction || {};
-            const richness = extraction.richness || 'plain';
+            const richness = extraction.richness || 'structured';
             addLog(`Extracting document text (${richness})...`, 'info');
             summaryOpts.documentText = await extractDocumentStructured({ richness });
             addLog(`Document text extracted (${summaryOpts.documentText.length} chars, ~${estimateTokenCount(summaryOpts.documentText)} tokens)`, 'info');
@@ -1472,7 +1472,7 @@ async function handleProcessDocument() {
         addLog(`Found ${docModel.paragraphs.length} paragraphs (~${docModel.totalTokens} tokens)`, 'info');
 
         // Step 2: Chunk document
-        const chunks = chunkDocument(docModel, { maxTokens: 12000 });
+        const chunks = chunkDocument(docModel, { maxTokens: 6000 });
         addLog(`Split into ${chunks.length} chunks`, 'info');
 
         // Step 3: Extract context
@@ -1495,7 +1495,7 @@ async function handleProcessDocument() {
             onProgress: updateProcessProgress,
             signal: processDocController.signal,
             concurrency: concurrency,
-            timeoutMs: 30000,
+            timeoutMs: 300000,
             commentInstructions: commentInstructions
         });
 
@@ -1590,7 +1590,7 @@ async function retryFailedChunks(failedResults, bookmarkMap, backendConfig) {
             onProgress: updateProcessProgress,
             signal: processDocController.signal,
             concurrency: 4,
-            timeoutMs: 30000,
+            timeoutMs: 300000,
             commentInstructions: commentInstructions
         });
 
