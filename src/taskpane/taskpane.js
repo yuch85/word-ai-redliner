@@ -3,7 +3,7 @@
 // Import CSS for webpack to bundle
 import './taskpane.css';
 import { applyTokenMapStrategy, applySentenceDiffStrategy } from 'office-word-diff';
-import { sendPrompt, testConnection as llmTestConnection } from '../lib/llm-client.js';
+import { sendPrompt, testConnection as llmTestConnection, stripMarkdown } from '../lib/llm-client.js';
 import { PromptManager, CATEGORIES } from '../lib/prompt-manager.js';
 import { CommentQueue } from '../lib/comment-queue.js';
 import { fireCommentRequest } from '../lib/comment-request.js';
@@ -119,7 +119,13 @@ function initialize() {
 
             if (selectedValue && selectedValue !== '__new__') {
                 // Existing prompt selected -- update in-place
-                promptManager.updatePrompt(category, selectedValue, { template });
+                const updates = { template };
+                // Capture commentInstructions for amendment prompts
+                if (category === 'amendment') {
+                    const commentField = document.getElementById('commentInstructions');
+                    updates.commentInstructions = commentField ? commentField.value.trim() : '';
+                }
+                promptManager.updatePrompt(category, selectedValue, updates);
                 unsavedText[category] = template;
                 addLog(`Prompt updated: ${promptManager.getPrompt(category, selectedValue).name} (${category})`, 'success');
             } else {
@@ -190,6 +196,13 @@ function initialize() {
         if (activePrompt) {
             unsavedText[category] = activePrompt.template;
             document.getElementById(`promptTextarea-${category}`).value = activePrompt.template;
+            // Restore commentInstructions for amendment prompts
+            if (category === 'amendment' && activePrompt.commentInstructions) {
+                const commentField = document.getElementById('commentInstructions');
+                if (commentField) {
+                    commentField.value = activePrompt.commentInstructions;
+                }
+            }
         }
     }
 
@@ -405,6 +418,11 @@ function handleCategoryPromptSelect(category, promptId) {
         promptManager.selectPrompt(category, null);
         textarea.value = '';
         unsavedText[category] = '';
+        // Clear commentInstructions when starting a new amendment prompt
+        if (category === 'amendment') {
+            const commentField = document.getElementById('commentInstructions');
+            if (commentField) commentField.value = '';
+        }
         addLog(`${capitalize(category)}: ready for new prompt`, "info");
         updateDotIndicators();
         updateReviewButton();
@@ -418,6 +436,11 @@ function handleCategoryPromptSelect(category, promptId) {
         promptManager.selectPrompt(category, null);
         textarea.value = '';
         unsavedText[category] = '';
+        // Clear commentInstructions when deactivating amendment prompt
+        if (category === 'amendment') {
+            const commentField = document.getElementById('commentInstructions');
+            if (commentField) commentField.value = '';
+        }
         addLog(`${capitalize(category)} prompt deactivated`, "info");
     } else {
         // Select and auto-activate prompt
@@ -425,6 +448,13 @@ function handleCategoryPromptSelect(category, promptId) {
         if (prompt) {
             textarea.value = prompt.template;
             unsavedText[category] = prompt.template;
+            // Restore commentInstructions for amendment prompts
+            if (category === 'amendment') {
+                const commentField = document.getElementById('commentInstructions');
+                if (commentField) {
+                    commentField.value = prompt.commentInstructions || '';
+                }
+            }
             addLog(`Loaded ${category} prompt: ${prompt.name}`, "info");
         }
     }
@@ -817,7 +847,13 @@ function handleSavePromptConfirm() {
         return;
     }
 
-    const prompt = promptManager.addPrompt(currentTab, { name, template, description });
+    const promptData = { name, template, description };
+    // Capture commentInstructions for amendment prompts
+    if (currentTab === 'amendment') {
+        const commentField = document.getElementById('commentInstructions');
+        promptData.commentInstructions = commentField ? commentField.value.trim() : '';
+    }
+    const prompt = promptManager.addPrompt(currentTab, promptData);
     addLog(`Prompt saved: ${name} (${currentTab})`, "success");
 
     renderCategoryDropdown(currentTab);
@@ -1228,7 +1264,8 @@ async function handleAmendmentOnly(selectionText, activeBackend) {
     }
 
     const backendConfig = getActiveBackendConfig();
-    const response = await sendPrompt(backendConfig, fullPrompt, addLog);
+    const rawResponse = await sendPrompt(backendConfig, fullPrompt, addLog);
+    const response = stripMarkdown(rawResponse, addLog);
 
     addLog(`LLM Response received [${backendConfig.model}]`, "success");
     addLog(`Response: ${response.substring(0, 100)}${response.length > 100 ? '...' : ''}`, "info");
@@ -1302,8 +1339,9 @@ async function handleMergedAmendmentComment(selectionText, commentInstructions, 
         }
     }
 
-    // Apply amendment as tracked changes
+    // Apply amendment as tracked changes (strip markdown artifacts first)
     if (parsed.amendment) {
+        parsed.amendment = stripMarkdown(parsed.amendment, addLog);
         addLog("Applying amendment changes...", "info");
 
         await Word.run(async (context) => {

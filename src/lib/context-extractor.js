@@ -34,7 +34,32 @@ const DEFINITION_PATTERNS = [
 
   // (hereinafter "Term") or (hereinafter referred to as "Term")
   /\(hereinafter\s+(?:referred\s+to\s+as\s+)?["\u201C]([^"\u201D]+)["\u201D]\)/gi,
+
+  // "Term" has the meaning given/set out/assigned
+  /["\u201C]([^"\u201D]+)["\u201D]\s+has\s+the\s+meaning\s+(?:given|set\s+out|assigned|ascribed)\b/gi,
+
+  // "Term" shall have the meaning
+  /["\u201C]([^"\u201D]+)["\u201D]\s+shall\s+have\s+the\s+meaning\b/gi,
+
+  // as defined in / as set out in (preceded by quoted term)
+  /["\u201C]([^"\u201D]+)["\u201D]\s+(?:as\s+defined|as\s+set\s+out)\s+in\b/gi,
+
+  // (each, a "Term") or (each a "Term") or (collectively, the "Term")
+  /\((?:each,?\s+(?:an?\s+)?|(?:together|collectively),?\s+(?:the\s+)?)["\u201C]([^"\u201D]+)["\u201D]\)/gi,
+
+  // Term: definition (paragraph-start colon format, common in legal definitions sections)
+  // Matches: "Accounts Date: the audited...", "[Assumed Liabilities: ..."
+  /^\[?\(?([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)*)\)?\]?\s*:\s/g,
 ];
+
+/**
+ * Common words that should not be treated as defined terms when found
+ * in paragraph-start colon format (e.g., "Note: this clause...").
+ */
+const EXCLUDED_COLON_TERMS = new Set([
+  'note', 'example', 'provided', 'where', 'when', 'if', 'for', 'subject',
+  'except', 'including', 'save', 'otherwise', 'notwithstanding',
+]);
 
 /**
  * Regex pattern for abbreviations: (XX) or (XXX) where XX is 2+ uppercase letters.
@@ -67,6 +92,11 @@ export function extractContext(docModel) {
       while ((match = pattern.exec(text)) !== null) {
         const term = match[1].trim();
         if (term.length >= 2 && term.length <= 60 && !seenTerms.has(term.toLowerCase())) {
+          // For colon-format pattern (last in array), exclude common false positives
+          if (pattern === DEFINITION_PATTERNS[DEFINITION_PATTERNS.length - 1]
+              && EXCLUDED_COLON_TERMS.has(term.toLowerCase())) {
+            continue;
+          }
           seenTerms.add(term.toLowerCase());
           definitions.push({
             term,

@@ -4,6 +4,9 @@
  */
 import { PromptManager, CATEGORIES } from '../src/lib/prompt-manager.js';
 
+// The output rules suffix appended to amendment-mode messages by composeMessages()
+const AMENDMENT_OUTPUT_RULES = '\n\nCRITICAL OUTPUT RULES:\n- Output ONLY the amended text. Do not include any commentary, explanations, notes, summaries, or descriptions of your changes.\n- Do NOT use markdown formatting. Output plain text only — no asterisks (*), no bold (**), no headings (###), no bullet points, no numbered lists unless they were in the original text.\n- Preserve the original text structure. Only change content as instructed, not formatting.\n- Do NOT add any preamble like "Here is the amended text:" or similar.\n- Do NOT add any postscript explaining what was changed.';
+
 // localStorage mock (node test environment has no DOM)
 const localStorageMock = (() => {
     let store = {};
@@ -49,7 +52,7 @@ describe('system message', () => {
 
         expect(messages).toHaveLength(2);
         expect(messages[0]).toEqual({ role: 'system', content: 'You are a legal reviewer' });
-        expect(messages[1]).toEqual({ role: 'user', content: 'contract text' });
+        expect(messages[1]).toEqual({ role: 'user', content: 'contract text' + AMENDMENT_OUTPUT_RULES });
     });
 
     test('when no context prompt is active, messages array has no system message', () => {
@@ -60,7 +63,7 @@ describe('system message', () => {
         const messages = pm.composeMessages('some text', 'amendment');
 
         expect(messages).toHaveLength(1);
-        expect(messages[0]).toEqual({ role: 'user', content: 'some text' });
+        expect(messages[0]).toEqual({ role: 'user', content: 'some text' + AMENDMENT_OUTPUT_RULES });
     });
 });
 
@@ -77,7 +80,7 @@ describe('amendment selection', () => {
         const messages = pm.composeMessages('hello world', 'amendment');
 
         expect(messages).toHaveLength(1);
-        expect(messages[0]).toEqual({ role: 'user', content: 'Review this: hello world' });
+        expect(messages[0]).toEqual({ role: 'user', content: 'Review this: hello world' + AMENDMENT_OUTPUT_RULES });
     });
 });
 
@@ -110,7 +113,7 @@ describe('edge cases', () => {
 
         const messages = pm.composeMessages('test', 'amendment');
 
-        expect(messages[0]).toEqual({ role: 'user', content: 'First: test, Second: test' });
+        expect(messages[0]).toEqual({ role: 'user', content: 'First: test, Second: test' + AMENDMENT_OUTPUT_RULES });
     });
 
     test('no active prompt for target category returns empty array', () => {
@@ -131,7 +134,7 @@ describe('edge cases', () => {
         const messages = pm.composeMessages('replaced text', 'amendment');
 
         expect(messages[0]).toEqual({ role: 'system', content: 'Context with {selection} token' });
-        expect(messages[1]).toEqual({ role: 'user', content: 'replaced text' });
+        expect(messages[1]).toEqual({ role: 'user', content: 'replaced text' + AMENDMENT_OUTPUT_RULES });
     });
 
     test('template without {selection} placeholder appends selection text automatically', () => {
@@ -154,7 +157,7 @@ describe('edge cases', () => {
 
         const messages = pm.composeMessages('clause text here', 'amendment');
 
-        expect(messages[0].content).toBe('Improve this clause.\n\nclause text here');
+        expect(messages[0].content).toBe('Improve this clause.\n\nclause text here' + AMENDMENT_OUTPUT_RULES);
     });
 
     test('composeMessages always returns array of {role, content} objects', () => {

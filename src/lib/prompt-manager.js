@@ -61,13 +61,20 @@ export class PromptManager {
      * @param {string} data.name - Human-readable name
      * @param {string} data.template - Prompt template text
      * @param {string} data.description - Short description
-     * @returns {object} The prompt object { id, name, template, description }
+     * @param {string} [data.commentInstructions] - Comment instructions (amendment category only)
+     * @returns {object} The prompt object { id, name, template, description, commentInstructions }
      */
-    addPrompt(category, { name, template, description }) {
+    addPrompt(category, { name, template, description, commentInstructions }) {
         this._validateCategory(category);
 
         const id = this._generateId(name);
         const prompt = { id, name, template, description };
+
+        // Persist commentInstructions for amendment prompts
+        if (category === 'amendment' && commentInstructions !== undefined) {
+            prompt.commentInstructions = commentInstructions;
+        }
+
         const catState = this.state[category];
 
         const existingIndex = catState.prompts.findIndex(p => p.id === id);
@@ -193,12 +200,15 @@ export class PromptManager {
             throw new Error(`Prompt "${promptId}" not found in ${category}`);
         }
 
-        // Only allow template and description to be updated
+        // Only allow template, description, and commentInstructions to be updated
         if (updates.template !== undefined) {
             prompt.template = updates.template;
         }
         if (updates.description !== undefined) {
             prompt.description = updates.description;
+        }
+        if (updates.commentInstructions !== undefined && category === 'amendment') {
+            prompt.commentInstructions = updates.commentInstructions;
         }
 
         this.persistState(category);
@@ -328,6 +338,12 @@ export class PromptManager {
                 // Template has no placeholder -- append selection text so it is always sent
                 content = targetPrompt.template + '\n\n' + selectionText;
             }
+
+            // Add output format constraints for amendment mode
+            if (category === 'amendment') {
+                content += '\n\nCRITICAL OUTPUT RULES:\n- Output ONLY the amended text. Do not include any commentary, explanations, notes, summaries, or descriptions of your changes.\n- Do NOT use markdown formatting. Output plain text only — no asterisks (*), no bold (**), no headings (###), no bullet points, no numbered lists unless they were in the original text.\n- Preserve the original text structure. Only change content as instructed, not formatting.\n- Do NOT add any preamble like "Here is the amended text:" or similar.\n- Do NOT add any postscript explaining what was changed.';
+            }
+
             messages.push({ role: 'user', content: content });
         }
 

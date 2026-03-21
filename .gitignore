@@ -35,5 +35,8 @@ word_api_docs/
 # Local scripts
 start.sh
 
+# Test documents (user-provided .docx files)
+test_docs/
+
 # Reference repos (cloned for research, not part of project)
 reference/

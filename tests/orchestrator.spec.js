@@ -423,6 +423,58 @@ describe('processChunksParallel', () => {
       expect(results[0].amendment).toBe('Revised text here');
       expect(results[0].comment).toBe('Suggested improvement');
     });
+
+    test('amendment mode with commentInstructions: parses delimited response as merged', async () => {
+      const mergedResponse =
+        '===AMENDMENT===\nAmended clause text\n===COMMENT===\nThis clause was modified for clarity';
+
+      const chunks = [mockChunk('chunk-0', 'original clause text', 0, 2)];
+
+      const results = await processChunksParallel(chunks, {
+        config: defaultConfig,
+        promptManager: mockPromptManager('amendment'),
+        documentContext: mockDocumentContext(),
+        log,
+        sendMessagesFn: mockSendMessages({ response: mergedResponse }),
+        formatContextPrefixFn: () => 'CONTEXT PREFIX',
+        commentInstructions: 'Explain all changes made',
+        parseDelimitedResponseFn: (text) => {
+          const amendIdx = text.indexOf('===AMENDMENT===');
+          const commentIdx = text.indexOf('===COMMENT===');
+          if (amendIdx === -1 && commentIdx === -1) return { amendment: null, comment: null, raw: text };
+          let amendment = null, comment = null;
+          if (amendIdx !== -1 && commentIdx !== -1) {
+            amendment = text.substring(amendIdx + '===AMENDMENT==='.length, commentIdx).trim();
+            comment = text.substring(commentIdx + '===COMMENT==='.length).trim();
+          }
+          return { amendment: amendment || null, comment: comment || null, raw: text };
+        },
+      });
+
+      expect(results[0].status).toBe('fulfilled');
+      expect(results[0].amendment).toBe('Amended clause text');
+      expect(results[0].comment).toBe('This clause was modified for clarity');
+    });
+
+    test('amendment mode without commentInstructions: treats entire response as amendment', async () => {
+      const plainResponse = 'Just the amended text, no delimiters';
+
+      const chunks = [mockChunk('chunk-0', 'original text', 0, 2)];
+
+      const results = await processChunksParallel(chunks, {
+        config: defaultConfig,
+        promptManager: mockPromptManager('amendment'),
+        documentContext: mockDocumentContext(),
+        log,
+        sendMessagesFn: mockSendMessages({ response: plainResponse }),
+        formatContextPrefixFn: () => 'CONTEXT PREFIX',
+        commentInstructions: '', // Empty -- no merged behavior
+      });
+
+      expect(results[0].status).toBe('fulfilled');
+      expect(results[0].amendment).toBe('Just the amended text, no delimiters');
+      expect(results[0].comment).toBeNull();
+    });
   });
 
   describe('context and prompt composition', () => {

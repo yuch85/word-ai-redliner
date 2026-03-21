@@ -123,7 +123,7 @@ jest.mock('office-word-diff', () => ({
 }));
 
 const { applyTokenMapStrategy, applySentenceDiffStrategy } = require('office-word-diff');
-const { bookmarkChunkRanges, applyChunkResults, cleanupBookmarks } = require('../src/lib/reassembler.js');
+const { bookmarkChunkRanges, applyChunkResults, cleanupBookmarks, _normalizeLineEndings, _alignParagraphs } = require('../src/lib/reassembler.js');
 
 // --- Mock Helpers ---
 
@@ -630,5 +630,107 @@ describe('cleanupBookmarks', () => {
     // The non-erroring ones should still be deleted
     expect(mock.deletedBookmarks).toContain('_wdpbm0');
     expect(mock.deletedBookmarks).toContain('_wdpbm2');
+  });
+});
+
+describe('_normalizeLineEndings', () => {
+  test('converts \\r to \\n', () => {
+    expect(_normalizeLineEndings('hello\rworld')).toBe('hello\nworld');
+  });
+
+  test('converts \\r\\n to \\n', () => {
+    expect(_normalizeLineEndings('hello\r\nworld')).toBe('hello\nworld');
+  });
+
+  test('preserves existing \\n', () => {
+    expect(_normalizeLineEndings('hello\nworld')).toBe('hello\nworld');
+  });
+
+  test('handles mixed line endings', () => {
+    expect(_normalizeLineEndings('a\rb\r\nc\nd')).toBe('a\nb\nc\nd');
+  });
+
+  test('handles empty string', () => {
+    expect(_normalizeLineEndings('')).toBe('');
+  });
+});
+
+describe('_alignParagraphs', () => {
+  test('identical paragraphs: all keep', () => {
+    const orig = ['Para 1', 'Para 2', 'Para 3'];
+    const amended = ['Para 1', 'Para 2', 'Para 3'];
+    const ops = _alignParagraphs(orig, amended);
+
+    expect(ops).toEqual([
+      { type: 'keep', origIdx: 0, newIdx: 0 },
+      { type: 'keep', origIdx: 1, newIdx: 1 },
+      { type: 'keep', origIdx: 2, newIdx: 2 },
+    ]);
+  });
+
+  test('paragraph deleted: produces delete op', () => {
+    const orig = ['Para 1', 'Para 2', 'Para 3'];
+    const amended = ['Para 1', 'Para 3'];
+    const ops = _alignParagraphs(orig, amended);
+
+    const types = ops.map(o => o.type);
+    expect(types).toContain('delete');
+    expect(types.filter(t => t === 'keep')).toHaveLength(2);
+    // The deleted paragraph should be origIdx 1
+    const deleteOp = ops.find(o => o.type === 'delete');
+    expect(deleteOp.origIdx).toBe(1);
+  });
+
+  test('paragraph inserted: produces insert op', () => {
+    const orig = ['Para 1', 'Para 3'];
+    const amended = ['Para 1', 'Para 2', 'Para 3'];
+    const ops = _alignParagraphs(orig, amended);
+
+    const types = ops.map(o => o.type);
+    expect(types).toContain('insert');
+    expect(types.filter(t => t === 'keep')).toHaveLength(2);
+    const insertOp = ops.find(o => o.type === 'insert');
+    expect(insertOp.newIdx).toBe(1);
+  });
+
+  test('paragraph with minor edits: matched as keep (similarity-based)', () => {
+    const orig = ['Original text here with some content'];
+    const amended = ['Modified text here with some content'];
+    const ops = _alignParagraphs(orig, amended);
+
+    // High similarity (shared words) -> matched as keep with text changes
+    expect(ops).toHaveLength(1);
+    expect(ops[0].type).toBe('keep');
+    expect(ops[0].origIdx).toBe(0);
+    expect(ops[0].newIdx).toBe(0);
+  });
+
+  test('completely different paragraph: appears as delete+insert pair', () => {
+    const orig = ['Alpha beta gamma'];
+    const amended = ['Zeta eta theta'];
+    const ops = _alignParagraphs(orig, amended);
+
+    // No shared words -> no similarity -> delete + insert
+    expect(ops).toHaveLength(2);
+    expect(ops[0].type).toBe('delete');
+    expect(ops[1].type).toBe('insert');
+  });
+
+  test('handles empty arrays', () => {
+    expect(_alignParagraphs([], [])).toEqual([]);
+    expect(_alignParagraphs(['a'], [])).toEqual([{ type: 'delete', origIdx: 0 }]);
+    expect(_alignParagraphs([], ['b'])).toEqual([{ type: 'insert', newIdx: 0 }]);
+  });
+
+  test('trims text for comparison', () => {
+    const orig = ['  Para 1  ', '  Para 2  '];
+    const amended = ['Para 1', 'Para 2'];
+    const ops = _alignParagraphs(orig, amended);
+
+    // Should match on trimmed text
+    expect(ops).toEqual([
+      { type: 'keep', origIdx: 0, newIdx: 0 },
+      { type: 'keep', origIdx: 1, newIdx: 1 },
+    ]);
   });
 });

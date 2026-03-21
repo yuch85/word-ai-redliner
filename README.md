@@ -67,10 +67,53 @@ extraction and tracked changes analysis.
 - Configurable endpoint URL and optional API key
 - Track Changes and Line Diff toggles
 
+### v0.3.0: Whole-Document Processing
+
+**Parallel LLM Orchestration**
+- Full-document amendment and commenting: parse, chunk, dispatch to LLM in parallel, reassemble
+- Worker-pool concurrency with configurable limits (auto-tuned: 4 workers for large chunks, 6 for smaller)
+- AbortController-based cancellation stops pending chunks immediately
+- Progress tracking with per-chunk ETA estimation
+- Retry failed chunks without re-processing successful ones
+
+**Document Parsing & Chunking**
+- Paragraph-level document parsing with style and heading detection
+- Token-aware chunking with configurable max size (default 6K tokens)
+- Heading-based chunk boundaries (H1/H2 trigger splits; H3+ stay coherent)
+- Overlap paragraphs provide preceding context to each chunk
+- Tiny trailing chunks merged into previous chunk to prevent orphans
+
+**Context Extraction**
+- Automatic definition extraction via regex (means/shall-mean/is-defined-as, the-X, hereinafter-X patterns)
+- Abbreviation expansion via word-initial matching heuristic
+- Document outline generation from heading hierarchy
+- Context prefix formatted and injected into each chunk's LLM system message
+
+**Formatting-Preserving Reassembly**
+- Paragraph-level amendment strategy: aligns LLM output paragraphs to original document paragraphs using LCS + word-level similarity matching
+- Within-paragraph word-level diff via token map strategy preserves run-level formatting (bold, italic, font, color)
+- Paragraph properties (styles, numbering, indentation) preserved through paragraph-scoped operations
+- Graceful degradation chain: paragraph-level -> word-level diff -> sentence diff -> block replace
+- Line ending normalization (`\r` <-> `\n`) throughout the pipeline
+- Content validation rejects severely truncated LLM output before applying
+- Amendments applied in reverse document order to prevent range invalidation
+- Bookmarks persist chunk ranges across LLM processing time
+
+**Merged Amendment + Comment Mode**
+- Comment instructions persisted with prompt data (save/restore across sessions)
+- When comment instructions are provided in amendment mode, LLM produces delimited `===AMENDMENT===` / `===COMMENT===` output
+- Response parser extracts both sections; comments inserted on bookmarked ranges after all amendments
+- Fallback: undelimited responses treated as amendment-only
+
+**LLM Output Quality**
+- Critical output rules appended to amendment prompts: no commentary, no markdown, preserve structure
+- `stripMarkdown()` post-processor as safety net for amendment responses
+- `stripThinkTags()` removes `<think>` reasoning blocks from LLM output
+
 **Testing**
-- 230 unit tests across 7 test suites (Jest)
+- 388 unit tests across 13 test suites (Jest)
 - TDD workflow: failing tests written before implementation
-- Covers: prompt state/persistence/composition, comment extraction, document generation, tracked changes OOXML parsing
+- Covers: prompt state/persistence/composition, comment extraction, document generation, tracked changes OOXML parsing, orchestrator dispatch/concurrency, reassembler paragraph alignment, document chunking, context extraction
 
 ## Setup
 
@@ -354,18 +397,60 @@ See `ARCHITECTURE.md` for details.
 ## Testing
 
 ```bash
-npx jest --no-coverage    # 230 tests across 7 suites
+npx jest --no-coverage    # 388 tests across 13 suites
 npx webpack --mode development   # verify build
 ```
 
 Test suites cover:
 - `prompt-state.spec.js` — PromptManager CRUD, activation, persistence, summary category
 - `prompt-persistence.spec.js` — localStorage round-trip, migration, edge cases
-- `prompt-composition.spec.js` — composeMessages, composeSummaryMessages, placeholder replacement
+- `prompt-composition.spec.js` — composeMessages, composeSummaryMessages, placeholder replacement, output rules
 - `comment-extractor.spec.js` — extractAllComments, extractDocumentStructured, estimateTokenCount, extractTrackedChanges (OOXML parsing)
 - `document-generator.spec.js` — buildSummaryHtml (markdown conversion, table borders, escaping), createSummaryDocument (Word API)
 - `comment-queue.spec.js` — CommentQueue state management, bookmark naming
-- `llm-client.spec.js` — sendPrompt, stripThinkTags, testConnection
+- `llm-client.spec.js` — sendPrompt, stripThinkTags, stripMarkdown, testConnection
+- `document-parser.spec.js` — parseDocument, paragraph extraction, heading detection, style mapping
+- `document-chunker.spec.js` — chunkDocument, heading-based splitting, overlap, token limits
+- `context-extractor.spec.js` — extractContext, definitions, abbreviations, outline generation
+- `orchestrator.spec.js` — processChunksParallel, concurrency, cancellation, merged mode parsing
+- `reassembler.spec.js` — paragraph alignment, line ending normalization, content validation
+- `response-parser.spec.js` — parseDelimitedResponse, fallback classification
+
+## Acknowledgments
+
+Word AI Redliner's formatting-preserving reassembly draws on insights from several
+excellent open-source projects in the document editing space. We are grateful to
+their authors for sharing their work:
+
+- **[office-word-diff](https://github.com/niclasgrunworked/office-word-diff)** by Niclas Grun --
+  The word-level diff engine at the heart of our tracked changes pipeline. Its
+  cascading token map -> sentence diff -> block replace strategy provides the
+  foundation for applying granular edits to Word documents.
+
+- **[docx-redline-js](https://github.com/AnsonLai/docx-redline-js)** by Anson Lai --
+  A JavaScript OOXML-level redlining engine whose surgical mode, paragraph
+  property cloning, and reconstruction writer patterns informed our approach to
+  preserving paragraph and run formatting during document reassembly.
+
+- **[safe-docx](https://github.com/usejunior/safe-docx)** by UseJunior --
+  A safe OOXML manipulation library whose paragraph shell cloning, template run
+  selection, multi-stage text matching, and run splitting patterns guided our
+  thinking on formatting fidelity and style resolution.
+
+- **[adeu](https://pypi.org/project/adeu/)** by Dealfluence Oy (Mikko Korpela, Uzair Ahmed) --
+  A Python OOXML redlining tool whose virtual text contract, run coalescing,
+  and deep-copy `w:pPr`/`w:rPr` preservation patterns shaped our understanding
+  of how to maintain formatting coherence through tracked change operations.
+
+- **[@xmldom/xmldom](https://github.com/xmldom/xmldom)** --
+  A W3C-compliant XML DOM implementation whose namespace-aware manipulation
+  patterns and whitespace preservation mechanisms underpin correct OOXML handling.
+
+- **superdoc-redlines** --
+  A multi-agent document redlining system whose intermediate representation
+  design, position mapping, fuzzy matching, content validation, and graceful
+  degradation patterns directly influenced our paragraph alignment algorithm
+  and LLM output validation.
 
 ## Licensing
 

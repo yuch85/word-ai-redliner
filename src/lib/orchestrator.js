@@ -18,7 +18,7 @@
  * @module orchestrator
  */
 
-import { sendMessages as defaultSendMessages } from './llm-client.js';
+import { sendMessages as defaultSendMessages, stripMarkdown } from './llm-client.js';
 import { formatContextPrefix as defaultFormatContextPrefix } from './context-extractor.js';
 import { parseDelimitedResponse as defaultParseDelimitedResponse } from './response-parser.js';
 
@@ -109,8 +109,19 @@ function _composeChunkMessages(chunk, documentContext, promptManager, mode, comm
     userContent = promptTemplate + '\n\n' + textContent;
   }
 
-  // For merged mode, append comment instructions with delimiter format
-  if (mode === 'both' && commentInstructions) {
+  // Add output format constraints for amendment mode
+  if (mode === 'amendment' || mode === 'both') {
+    userContent += `\n\nCRITICAL OUTPUT RULES:
+- Output ONLY the amended text. Do not include any commentary, explanations, notes, summaries, or descriptions of your changes.
+- Do NOT use markdown formatting. Output plain text only — no asterisks (*), no bold (**), no headings (###), no bullet points, no numbered lists unless they were in the original text.
+- Preserve the original text structure. Only change content as instructed, not formatting.
+- Do NOT add any preamble like "Here is the amended text:" or similar.
+- Do NOT add any postscript explaining what was changed.`;
+  }
+
+  // For merged mode, append comment instructions with delimiter format.
+  // When mode is 'amendment' but commentInstructions are provided, treat as merged.
+  if ((mode === 'both' || mode === 'amendment') && commentInstructions) {
     userContent += `\n\nAdditionally, provide a comment for this text based on these instructions: ${commentInstructions.trim()}
 
 FORMAT YOUR RESPONSE WITH THESE EXACT DELIMITERS:
@@ -235,11 +246,14 @@ export async function processChunksParallel(chunks, options) {
       // Send to LLM
       const responseText = await sendMessagesFn(config, messages, log, signal, timeoutMs);
 
-      // Parse response based on mode
+      // Parse response based on mode.
+      // When mode is 'amendment' but commentInstructions are provided,
+      // the prompt requested delimited output -- parse it as merged.
       let amendment = null;
       let comment = null;
+      const isMerged = (mode === 'both') || (mode === 'amendment' && commentInstructions);
 
-      if (mode === 'both') {
+      if (isMerged) {
         const parsed = parseDelimitedResponseFn(responseText);
         amendment = parsed.amendment;
         comment = parsed.comment;
@@ -253,6 +267,11 @@ export async function processChunksParallel(chunks, options) {
         comment = responseText;
       }
 
+      // Post-process: strip markdown artifacts from amendment text
+      if (amendment) {
+        amendment = stripMarkdown(amendment, log);
+      }
+
       completed++;
       chunkTimings.push(Date.now() - chunkStart);
       results[chunkIndex] = makeResult(chunkIndex, chunk, 'fulfilled', { amendment, comment });
@@ -260,6 +279,13 @@ export async function processChunksParallel(chunks, options) {
       if (error.name === 'AbortError') {
         cancelled++;
         results[chunkIndex] = makeResult(chunkIndex, chunk, 'cancelled');
+      } else if (error.name === 'TimeoutError') {
+        failed++;
+        chunkTimings.push(Date.now() - chunkStart);
+        results[chunkIndex] = makeResult(chunkIndex, chunk, 'rejected', {
+          error: error.message || String(error),
+        });
+        log(`Chunk ${chunk.id}: ${error.message}`, 'warning');
       } else {
         failed++;
         chunkTimings.push(Date.now() - chunkStart);
