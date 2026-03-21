@@ -5,7 +5,7 @@ a structure-aware diff strategy — plus document summarization with comment
 extraction and tracked changes analysis.
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=0Oa05jk3wrU">
+  <a href="https://www.youtube.com/watch?v=SusffH8eT-Y">
     <img src="docs/word-ai-redliner.gif" alt="Word AI Redliner demo" />
   </a>
 </p>
