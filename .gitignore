@@ -26,8 +26,18 @@ logs/e2e-test-logs.json
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDE / AI tooling
 *.code-workspace
+.claude/
+.specstory/
+.planning/
+.cursor/
+
+# Evaluations
+evals/
+
+# Generated manifest (use manifest.template.xml + generate-manifest.cjs)
+manifest.xml
 
 # Word API reference docs
 word_api_docs/
